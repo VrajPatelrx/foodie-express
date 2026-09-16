@@ -223,7 +223,7 @@ function render() {
                         <span style="color:var(--blue); display:flex; align-items:center;">${Icons.rider(15)}</span>
                         <span>${o.rider_name}</span>
                       </div>
-                      ${o.rider_phone ? `<div style="font-size:11px; color:var(--ink-secondary); margin-left:21px; margin-top:2px;">📞 ${o.rider_phone}</div>` : ''}
+                      ${o.rider_phone ? `<div style="font-size:11px; color:var(--ink-secondary); margin-left:21px; margin-top:2px; display:flex; align-items:center; gap:4px;">${Icons.phone(12)} <span>${o.rider_phone}</span></div>` : ''}
                     ` : `
                       <span style="color:var(--ink-muted); font-size:12px; font-style:italic;">Unassigned</span>
                     `}

@@ -148,4 +148,23 @@ try {
   `);
 } catch (e) {}
 
+// Sync and backfill any riders or vendors registered without linked profile records
+try {
+  const unlinkedRiders = db.prepare("SELECT id, name, phone FROM users WHERE role = 'RIDER' AND (rider_id IS NULL OR rider_id NOT IN (SELECT id FROM riders))").all();
+  for (const u of unlinkedRiders) {
+    const res = db.prepare("INSERT INTO riders (name, status, vehicle, phone, rating, earnings) VALUES (?, 'AVAILABLE', 'Bike', ?, 4.8, 0)")
+      .run(u.name, u.phone || '9876543210');
+    db.prepare("UPDATE users SET rider_id = ? WHERE id = ?").run(res.lastInsertRowid, u.id);
+  }
+
+  const unlinkedVendors = db.prepare("SELECT id, name FROM users WHERE role = 'VENDOR' AND (restaurant_id IS NULL OR restaurant_id NOT IN (SELECT id FROM restaurants))").all();
+  for (const u of unlinkedVendors) {
+    const res = db.prepare("INSERT INTO restaurants (name, cuisine, rating, eta_minutes, is_open, lat, lng) VALUES (?, 'Pure Veg Kitchen & Snacks', 4.5, 25, 1, 22.5540, 72.9500)")
+      .run(`${u.name}'s Kitchen`);
+    db.prepare("UPDATE users SET restaurant_id = ? WHERE id = ?").run(res.lastInsertRowid, u.id);
+  }
+} catch (e) {
+  console.warn('Profile sync warning:', e.message);
+}
+
 module.exports = db;

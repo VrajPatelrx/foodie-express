@@ -224,7 +224,12 @@ function toast(msg, type = 'info') {
     el.className = 'toast';
     document.body.appendChild(el);
   }
-  el.innerHTML = `<span>${type === 'error' ? '⚠️' : type === 'success' ? '✅' : '🔔'}</span> ${msg}`;
+  const iconSvg = type === 'error'
+    ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`
+    : type === 'success'
+    ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22C55E" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"/><polyline points="9 12 11.5 14.5 15.5 9.5"/></svg>`
+    : `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FF5A1F" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`;
+  el.innerHTML = `<span style="display:inline-flex; align-items:center;">${iconSvg}</span> <span>${msg}</span>`;
   el.classList.add('show');
   clearTimeout(el._t);
   el._t = setTimeout(() => el.classList.remove('show'), 2800);
@@ -298,12 +303,12 @@ function renderErrorScreen(container, options = {}) {
       <p class="empty-state-desc">${desc}</p>
 
       <div class="empty-state-hint">
-        <span>📡</span> <span>${cleanHint}</span>
+        <span style="display:inline-flex; align-items:center;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg></span> <span>${cleanHint}</span>
       </div>
 
       <div class="empty-state-actions">
         <button type="button" class="empty-state-retry-btn" id="feRetryBtn">
-          <span class="retry-icon">🔄</span> <span class="retry-label">${retryText}</span>
+          <span class="retry-icon" style="display:inline-flex; align-items:center;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></span> <span class="retry-label">${retryText}</span>
         </button>
         ${showSwitchRole ? `
           <a href="/login.html" class="empty-state-secondary-btn">
@@ -518,10 +523,10 @@ const LiveConnection = {
       await fetch('/api/network-info', { cache: 'no-store' });
       const ms = Date.now() - t0;
       this.setStatus('connected', `Live (${ms}ms)`);
-      if (showToast) toast(`🟢 Server Online (${ms}ms ping)`, 'success');
+      if (showToast) toast(`Server Online (${ms}ms ping)`, 'success');
     } catch (e) {
       this.setStatus('offline', 'Offline');
-      if (showToast) toast('🔴 Server Offline / Unreachable', 'error');
+      if (showToast) toast('Server Offline / Unreachable', 'error');
     }
   },
   setStatus(state, label) {

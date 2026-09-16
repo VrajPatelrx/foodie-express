@@ -157,6 +157,23 @@ app.post('/api/auth/login', (req, res) => {
     return res.status(401).json({ error: 'Incorrect password.' });
   }
 
+  // Self-heal: ensure RIDER has rider_id linked in riders table
+  if (user.role === 'RIDER' && (!user.rider_id || !db.prepare('SELECT id FROM riders WHERE id = ?').get(user.rider_id))) {
+    const riderRes = db.prepare("INSERT INTO riders (name, status, vehicle, phone, rating, earnings) VALUES (?, 'AVAILABLE', 'Bike', ?, 4.8, 0)")
+      .run(user.name, user.phone || '9876543210');
+    user.rider_id = riderRes.lastInsertRowid;
+    db.prepare('UPDATE users SET rider_id = ? WHERE id = ?').run(user.rider_id, user.id);
+    io.emit('riders:update');
+  }
+
+  // Self-heal: ensure VENDOR has restaurant_id linked in restaurants table
+  if (user.role === 'VENDOR' && (!user.restaurant_id || !db.prepare('SELECT id FROM restaurants WHERE id = ?').get(user.restaurant_id))) {
+    const restRes = db.prepare("INSERT INTO restaurants (name, cuisine, rating, eta_minutes, is_open, lat, lng) VALUES (?, 'Pure Veg Kitchen & Snacks', 4.5, 25, 1, 22.5540, 72.9500)")
+      .run(`${user.name}'s Kitchen`);
+    user.restaurant_id = restRes.lastInsertRowid;
+    db.prepare('UPDATE users SET restaurant_id = ? WHERE id = ?').run(user.restaurant_id, user.id);
+  }
+
   const { password_hash, ...safeUser } = user;
   res.json({ success: true, user: safeUser, token: `user_token_${safeUser.id}` });
 });
@@ -189,26 +206,60 @@ app.post('/api/auth/register', (req, res) => {
   const userRole = ['CUSTOMER', 'VENDOR', 'RIDER'].includes(role) ? role : 'CUSTOMER';
   const pwdHash = hashPassword(password);
 
+  let restaurantId = null;
+  let riderId = null;
+
+  // If registering as Delivery Partner, create rider record so they immediately appear in portal and fleet
+  if (userRole === 'RIDER') {
+    const riderRes = db.prepare(`
+      INSERT INTO riders (name, status, vehicle, phone, rating, earnings)
+      VALUES (?, 'AVAILABLE', 'Bike', ?, 4.8, 0)
+    `).run(name.trim(), cleanPhone);
+    riderId = riderRes.lastInsertRowid;
+  } else if (userRole === 'VENDOR') {
+    const restRes = db.prepare(`
+      INSERT INTO restaurants (name, cuisine, rating, eta_minutes, is_open, lat, lng)
+      VALUES (?, 'Pure Veg Kitchen & Snacks', 4.5, 25, 1, 22.5540, 72.9500)
+    `).run(`${name.trim()}'s Kitchen`);
+    restaurantId = restRes.lastInsertRowid;
+
+    // Seed default starter pure veg items for the new kitchen
+    const itemStmt = db.prepare(`
+      INSERT INTO menu_items (restaurant_id, name, category, price, veg, is_available)
+      VALUES (?, ?, ?, ?, 1, 1)
+    `);
+    itemStmt.run(restaurantId, 'Gujarati Special Thali', 'Meals', 160);
+    itemStmt.run(restaurantId, 'Fafda & Jalebi Combo', 'Snacks', 90);
+    itemStmt.run(restaurantId, 'Kadhi Khichdi Bowl', 'Meals', 120);
+  }
+
   const insert = db.prepare(`
-    INSERT INTO users (name, email, phone, password_hash, role)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO users (name, email, phone, password_hash, role, restaurant_id, rider_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
   `);
-  const info = insert.run(name.trim(), email.trim().toLowerCase(), cleanPhone, pwdHash, userRole);
+  const info = insert.run(name.trim(), email.trim().toLowerCase(), cleanPhone, pwdHash, userRole, restaurantId, riderId);
+  const userId = info.lastInsertRowid;
 
   // Pre-seed a default "Home" address for customer
   if (userRole === 'CUSTOMER') {
     db.prepare(`
       INSERT INTO customer_addresses (user_id, label, address, is_default)
       VALUES (?, ?, ?, ?)
-    `).run(info.lastInsertRowid, 'Home', 'Sunshine Heights, Anand', 1);
+    `).run(userId, 'Home', 'Sunshine Heights, Anand', 1);
+  }
+
+  if (userRole === 'RIDER') {
+    io.emit('riders:update');
   }
 
   const newUser = {
-    id: info.lastInsertRowid,
+    id: userId,
     name: name.trim(),
     email: email.trim().toLowerCase(),
     phone: cleanPhone,
-    role: userRole
+    role: userRole,
+    restaurant_id: restaurantId,
+    rider_id: riderId
   };
 
   res.status(201).json({ success: true, user: newUser, token: `user_token_${newUser.id}` });

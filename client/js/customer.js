@@ -1640,7 +1640,11 @@ function renderTracking(order) {
           </div>
           <div style="flex:1;">
             <div style="font-weight:700; font-size:14px;">${order.rider_name} is delivering your food</div>
-            <div style="font-size:12px; color:var(--ink-secondary);">${order.rider_vehicle || 'Motorcycle'} • 📞 ${order.rider_phone || '9876543210'}</div>
+            <div style="font-size:12px; color:var(--ink-secondary); display:flex; align-items:center; gap:5px; margin-top:2px;">
+              <span>${order.rider_vehicle || 'Motorcycle'}</span>
+              <span>•</span>
+              <span style="display:inline-flex; align-items:center; gap:3px;">${Icons.phone(12)} ${order.rider_phone || '9876543210'}</span>
+            </div>
           </div>
           <a href="tel:${order.rider_phone || ''}" class="btn-secondary" style="padding:6px 12px; font-size:12px; color:var(--primary); border-color:var(--primary); font-weight:700;">Call</a>
         </div>

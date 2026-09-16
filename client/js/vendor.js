@@ -237,7 +237,7 @@ function render() {
                     <td><span class="mono" style="font-weight:800; color:var(--ink); font-size:13.5px;">#${o.id}</span></td>
                     <td>
                       <div style="font-weight:700; font-size:13.5px;">${o.customer_name}</div>
-                      ${o.customer_phone ? `<div style="font-size:11px; color:var(--ink-secondary); margin-top:2px;">📞 ${o.customer_phone}</div>` : ''}
+                      ${o.customer_phone ? `<div style="font-size:11px; color:var(--ink-secondary); margin-top:2px; display:flex; align-items:center; gap:4px;">${Icons.phone(12)} <span>${o.customer_phone}</span></div>` : ''}
                     </td>
                     <td>
                       <div style="display:flex; flex-wrap:wrap; gap:5px;">
