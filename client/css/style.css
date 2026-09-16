@@ -2374,6 +2374,19 @@ table.data tr:hover td {
   }
 }
 
+.master-feed-table {
+  min-width: 1120px !important;
+}
+
+.admin-table th.text-center, .admin-table td.text-center {
+  text-align: center !important;
+}
+
+.admin-table th.text-right, .admin-table td.text-right {
+  text-align: right !important;
+}
+
+
 
 
 

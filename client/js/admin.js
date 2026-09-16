@@ -116,14 +116,18 @@ function render() {
         ${overview.riders.map(r => `
           <div class="card" style="padding:14px;">
             <div style="display:flex; justify-content:space-between; align-items:center;">
-              <span style="font-size:24px;">🛵</span>
+              <span style="display:flex; align-items:center; color:var(--primary);">${Icons.rider(22)}</span>
               <span class="badge ${r.status === 'AVAILABLE' ? 'open' : r.status === 'BUSY' ? 'busy' : 'closed'}">
                 ${r.status}
               </span>
             </div>
             <div style="font-weight:700; font-size:14px; margin-top:8px;">${r.name}</div>
-            <div style="font-size:12px; color:var(--ink-secondary); margin-top:2px;">
-              ${r.vehicle || 'Bike'} · ★ ${r.rating || 4.8} · 💰 ₹${r.earnings || 0}
+            <div style="font-size:12px; color:var(--ink-secondary); margin-top:4px; display:flex; align-items:center; gap:8px;">
+              <span>${r.vehicle || 'Bike'}</span>
+              <span>•</span>
+              <span style="display:inline-flex; align-items:center; gap:3px;">${Icons.star(12)} ${r.rating || 4.8}</span>
+              <span>•</span>
+              <span style="font-weight:700; color:var(--ink);">₹${r.earnings || 0}</span>
             </div>
           </div>
         `).join('')}
@@ -131,19 +135,24 @@ function render() {
     </div>
 
     <!-- Live Master Orders Table -->
-    <div class="card" style="padding:20px;">
-      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:16px;">
+    <div class="card" style="padding:22px; margin-top:24px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px; margin-bottom:18px;">
         <div>
-          <h3 style="font-size:16px;">Master Order Feed (${filteredOrders.length})</h3>
-          <div style="font-size:12px; color:var(--ink-secondary);">Real-time synchronized across network with manual dispatch override.</div>
+          <h3 style="font-size:17px; font-weight:800; margin-bottom:4px;">Master Order Feed (${filteredOrders.length})</h3>
+          <div style="font-size:12.5px; color:var(--ink-secondary);">Real-time synchronized live dispatch stream with manual partner assignment override.</div>
         </div>
 
-        <div style="display:flex; gap:10px; flex-wrap:wrap;">
-          <input type="text" id="orderTableSearch" placeholder="Search order, customer, restaurant..." 
-            value="${state.searchQuery}" style="width:240px; padding:6px 12px; font-size:13px;">
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+          <div style="position:relative; width:260px;">
+            <span style="position:absolute; left:12px; top:50%; transform:translateY(-50%); display:flex; align-items:center; color:var(--ink-muted);">
+              ${Icons.search(15)}
+            </span>
+            <input type="text" id="orderTableSearch" placeholder="Search order, customer, store..." 
+              value="${state.searchQuery}" style="width:100%; height:38px; padding-left:36px; padding-right:12px; font-size:13px; border-radius:var(--radius-sm); border:1px solid var(--border);">
+          </div>
           
-          <select id="orderStatusFilter" style="width:160px; padding:6px 10px; font-size:13px;">
-            <option value="ALL" ${state.statusFilter === 'ALL' ? 'selected' : ''}>All Statuses</option>
+          <select id="orderStatusFilter" style="width:170px; height:38px; padding:0 12px; font-size:13px; border-radius:var(--radius-sm); border:1px solid var(--border); background:#fff; font-weight:600;">
+            <option value="ALL" ${state.statusFilter === 'ALL' ? 'selected' : ''}>All Statuses (${orders.length})</option>
             <option value="PLACED" ${state.statusFilter === 'PLACED' ? 'selected' : ''}>Placed</option>
             <option value="ACCEPTED" ${state.statusFilter === 'ACCEPTED' ? 'selected' : ''}>Accepted</option>
             <option value="PREPARING" ${state.statusFilter === 'PREPARING' ? 'selected' : ''}>Preparing</option>
@@ -156,57 +165,95 @@ function render() {
         </div>
       </div>
 
+      <div class="mobile-scroll-hint">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        Swipe horizontally to view full feed columns
+      </div>
+
       <div class="table-responsive">
-        <table class="admin-table">
+        <table class="admin-table master-feed-table">
           <thead>
             <tr>
-              <th>#</th>
-              <th>Customer</th>
-              <th>Restaurant</th>
-              <th>Status</th>
-              <th>Assigned Rider</th>
-              <th>Total</th>
-              <th>Delivery PIN</th>
-              <th>Date & Time</th>
-              <th>Manual Dispatch</th>
+              <th style="width:75px; text-align:center;">#</th>
+              <th style="width:200px;">Customer</th>
+              <th style="width:190px;">Kitchen / Store</th>
+              <th style="width:140px; text-align:center;">Status</th>
+              <th style="width:160px;">Assigned Rider</th>
+              <th style="width:110px; text-align:right;">Total</th>
+              <th style="width:120px; text-align:center;">Delivery PIN</th>
+              <th style="width:170px;">Date & Time</th>
+              <th style="width:210px; text-align:center;">Manual Dispatch</th>
             </tr>
           </thead>
           <tbody>
-            ${filteredOrders.map(o => {
+            ${filteredOrders.length === 0 ? `
+              <tr>
+                <td colspan="9" style="text-align:center; padding:40px 20px; color:var(--ink-muted);">
+                  No orders match your filter criteria.
+                </td>
+              </tr>
+            ` : filteredOrders.map(o => {
               const canManualAssign = ['READY', 'PLACED', 'ACCEPTED'].includes(o.status);
               return `
                 <tr>
-                  <td style="font-weight:700;">#${o.id}</td>
-                  <td>
-                    <div style="font-weight:600;">${o.customer_name}</div>
-                    <div style="font-size:11px; color:var(--ink-secondary);">${o.customer_address}</div>
+                  <td style="text-align:center;">
+                    <span class="mono" style="font-weight:800; font-size:13.5px; color:var(--ink);">#${o.id}</span>
                   </td>
-                  <td>${o.restaurant_emoji} ${o.restaurant_name}</td>
                   <td>
-                    <span class="stamp st-${o.status}" style="font-size:10px; padding:3px 8px;">
-                      ${STATUS_LABEL[o.status]}
+                    <div style="font-weight:700; font-size:13.5px; color:var(--ink);">${o.customer_name}</div>
+                    <div style="font-size:11.5px; color:var(--ink-secondary); max-width:210px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px;" title="${o.customer_address}">
+                      ${o.customer_address}
+                    </div>
+                  </td>
+                  <td>
+                    <div style="font-weight:700; font-size:13px; color:var(--ink); display:flex; align-items:center; gap:6px;">
+                      <span style="color:var(--primary); display:flex; align-items:center;">${Icons.kitchen(15)}</span>
+                      <span>${o.restaurant_name}</span>
+                    </div>
+                    <div style="font-size:11px; color:var(--ink-secondary); margin-top:2px; margin-left:21px;">${o.restaurant_cuisine || ''}</div>
+                  </td>
+                  <td style="text-align:center;">
+                    <span class="stamp st-${o.status}" style="font-size:10.5px; padding:3px 8px;">
+                      ${STATUS_LABEL[o.status] || o.status}
                     </span>
                   </td>
-                  <td>${o.rider_name || '<span style="color:var(--ink-muted);">Unassigned</span>'}</td>
-                  <td style="font-weight:700;">₹${o.total}</td>
-                  <td style="font-family:'JetBrains Mono',monospace; font-weight:700; color:var(--primary);">${o.delivery_otp || '—'}</td>
                   <td>
-                    <div style="font-weight:700; font-size:12px;">${formatOrderDateTime(o.created_at)}</div>
-                    <div style="color:var(--ink-muted); font-size:11px;">${timeAgo(o.created_at)}</div>
+                    ${o.rider_name ? `
+                      <div style="font-weight:700; font-size:13px; display:flex; align-items:center; gap:6px;">
+                        <span style="color:var(--blue); display:flex; align-items:center;">${Icons.rider(15)}</span>
+                        <span>${o.rider_name}</span>
+                      </div>
+                      ${o.rider_phone ? `<div style="font-size:11px; color:var(--ink-secondary); margin-left:21px; margin-top:2px;">📞 ${o.rider_phone}</div>` : ''}
+                    ` : `
+                      <span style="color:var(--ink-muted); font-size:12px; font-style:italic;">Unassigned</span>
+                    `}
+                  </td>
+                  <td style="text-align:right;">
+                    <strong style="font-size:14px; color:var(--ink);">₹${o.total}</strong>
+                    <div style="font-size:10.5px; color:var(--ink-muted);">${o.payment_method || 'UPI'}</div>
+                  </td>
+                  <td style="text-align:center;">
+                    <span class="pin-badge" style="font-family:'JetBrains Mono',monospace; font-weight:800; background:var(--primary-soft); color:var(--primary); padding:3px 9px; border-radius:6px; border:1px solid var(--primary-border); font-size:12.5px; letter-spacing:1px;">
+                      ${o.delivery_otp || o.delivery_pin || '—'}
+                    </span>
                   </td>
                   <td>
+                    <div style="font-weight:700; font-size:12.5px; color:var(--ink);">${formatOrderDateTime(o.created_at)}</div>
+                    <div style="color:var(--ink-muted); font-size:11px; margin-top:2px;">${timeAgo(o.created_at)}</div>
+                  </td>
+                  <td style="text-align:center;">
                     ${canManualAssign ? `
-                      <div style="display:flex; gap:6px; align-items:center;">
-                        <select data-assign-select="${o.id}" style="padding:4px 8px; font-size:11px; width:130px;">
-                          <option value="">Select Rider...</option>
+                      <div style="display:inline-flex; gap:6px; align-items:center; justify-content:center;">
+                        <select data-assign-select="${o.id}" style="padding:5px 8px; font-size:11.5px; width:135px; height:32px; border-radius:var(--radius-sm); border:1px solid var(--border); background:#fff;">
+                          <option value="">Select Partner...</option>
                           ${overview.riders.map(r => `<option value="${r.id}" ${r.status === 'BUSY' ? 'disabled' : ''}>${r.name} (${r.status})</option>`).join('')}
                         </select>
-                        <button class="btn-primary" data-assign-btn="${o.id}" style="padding:4px 10px; font-size:11px;">
+                        <button class="btn-primary" data-assign-btn="${o.id}" style="padding:5px 12px; font-size:11.5px; height:32px; border-radius:var(--radius-sm); font-weight:700; white-space:nowrap;">
                           Assign
                         </button>
                       </div>
                     ` : `
-                      <span style="font-size:11px; color:var(--ink-muted);">Locked</span>
+                      <span style="font-size:11.5px; color:var(--ink-muted); background:var(--surface-alt); padding:3px 10px; border-radius:999px;">Locked</span>
                     `}
                   </td>
                 </tr>
@@ -218,12 +265,17 @@ function render() {
     </div>
   `;
 
-  // Search input handler
+  // Search input handler with focus and cursor preservation
   const searchEl = document.getElementById('orderTableSearch');
   if (searchEl) {
     searchEl.addEventListener('input', (e) => {
       state.searchQuery = e.target.value;
       render();
+      const input = document.getElementById('orderTableSearch');
+      if (input) {
+        input.focus();
+        input.setSelectionRange(input.value.length, input.value.length);
+      }
     });
   }
 
