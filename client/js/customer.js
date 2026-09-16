@@ -1042,7 +1042,7 @@ async function renderOrders() {
                   </div>
                   <div>
                     <h4 style="font-size:16px; margin:0 0 2px;">${o.restaurant_name}</h4>
-                    <div style="font-size:12px; color:var(--ink-secondary);">Order #${o.id} • Placed ${timeAgo(o.created_at)}</div>
+                    <div style="font-size:12px; color:var(--ink-secondary);">Order #${o.id} • ${formatOrderDateTime(o.created_at)} (${timeAgo(o.created_at)})</div>
                   </div>
                 </div>
                 <div style="text-align:right;">
@@ -1098,7 +1098,7 @@ async function renderOrders() {
                   </div>
                   <div>
                     <h4 style="font-size:16px; margin:0 0 2px;">${o.restaurant_name}</h4>
-                    <div style="font-size:12px; color:var(--ink-secondary);">Order #${o.id} • ${timeAgo(o.created_at)}</div>
+                    <div style="font-size:12px; color:var(--ink-secondary);">Order #${o.id} • ${formatOrderDateTime(o.created_at)}</div>
                   </div>
                 </div>
                 <div style="text-align:right;">
@@ -1312,7 +1312,7 @@ function openReceiptModal(order) {
 
       <div style="font-size:13px; color:var(--ink-secondary); margin-bottom:12px;">
         Restaurant: <strong>${order.restaurant_name}</strong><br>
-        Date: ${new Date(order.created_at).toLocaleString()}<br>
+        Date: <strong>${formatOrderDateTime(order.created_at)}</strong><br>
         Payment: <strong>${order.payment_method}</strong>
       </div>
 
@@ -1688,7 +1688,10 @@ function renderTracking(order) {
             <div style="font-weight:700; font-size:13px;">${STATUS_LABEL[l.status] || l.status}</div>
             <div style="font-size:12px; color:var(--ink-secondary);">${l.note || ''}</div>
           </div>
-          <span style="font-size:12px; color:var(--ink-muted);">${timeAgo(l.created_at)}</span>
+          <div style="text-align:right;">
+            <div style="font-size:12px; font-weight:600; color:var(--ink);">${formatOrderDateTime(l.created_at)}</div>
+            <div style="font-size:11px; color:var(--ink-muted);">${timeAgo(l.created_at)}</div>
+          </div>
         </div>
       `).join('')}
     </div>

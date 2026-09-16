@@ -203,37 +203,58 @@ function render() {
     </div>
 
     <!-- Collapsible History -->
-    <div style="margin-top:24px;">
-      <button class="btn-secondary" id="toggleHistoryBtn" style="font-size:12px; padding:6px 14px;">
-        ${state.showHistory ? 'Hide Past Orders' : `View Past Orders (${groups.history.length})`}
-      </button>
+    <div style="margin-top:28px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <button class="btn-secondary" id="toggleHistoryBtn" style="font-size:12.5px; padding:8px 16px; font-weight:700; display:inline-flex; align-items:center; gap:8px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="transform:${state.showHistory ? 'rotate(180deg)' : 'none'}; transition:transform 0.2s;">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+          ${state.showHistory ? 'Hide Completed Order History' : `View Completed Order History (${groups.history.length})`}
+        </button>
+      </div>
 
       ${state.showHistory && groups.history.length ? `
-        <div class="card" style="margin-top:12px; overflow-x:auto;">
-          <table class="admin-table">
-            <thead>
-              <tr>
-                <th>Order ID</th>
-                <th>Customer</th>
-                <th>Items</th>
-                <th>Total</th>
-                <th>Status</th>
-                <th>Time</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${groups.history.map(o => `
+        <div style="margin-top:12px;">
+          <div class="mobile-scroll-hint">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            Swipe horizontally to view full order history
+          </div>
+          <div class="table-responsive">
+            <table class="admin-table">
+              <thead>
                 <tr>
-                  <td><strong>#${o.id}</strong></td>
-                  <td>${o.customer_name}</td>
-                  <td>${o.items.map(i => `${i.qty}×${i.name}`).join(', ')}</td>
-                  <td>₹${o.total}</td>
-                  <td><span class="stamp st-${o.status}">${STATUS_LABEL[o.status] || o.status}</span></td>
-                  <td style="color:var(--ink-muted); font-size:12px;">${timeAgo(o.created_at)}</td>
+                  <th style="width:100px;">Order ID</th>
+                  <th style="width:170px;">Customer</th>
+                  <th>Items Ordered</th>
+                  <th style="width:110px;">Total</th>
+                  <th style="width:130px;">Status</th>
+                  <th style="width:190px;">Date & Time</th>
                 </tr>
-              `).join('')}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                ${groups.history.map(o => `
+                  <tr>
+                    <td><span class="mono" style="font-weight:800; color:var(--ink); font-size:13.5px;">#${o.id}</span></td>
+                    <td>
+                      <div style="font-weight:700; font-size:13.5px;">${o.customer_name}</div>
+                      ${o.customer_phone ? `<div style="font-size:11px; color:var(--ink-secondary); margin-top:2px;">📞 ${o.customer_phone}</div>` : ''}
+                    </td>
+                    <td>
+                      <div style="display:flex; flex-wrap:wrap; gap:5px;">
+                        ${o.items.map(i => `<span class="order-item-chip" style="font-size:11.5px; padding:3px 8px;">${i.qty}× ${i.name}</span>`).join('')}
+                      </div>
+                    </td>
+                    <td><strong style="font-size:14px; color:var(--ink);">₹${o.total}</strong></td>
+                    <td><span class="stamp st-${o.status}">${STATUS_LABEL[o.status] || o.status}</span></td>
+                    <td>
+                      <div style="font-weight:700; font-size:12.5px; color:var(--ink);">${formatOrderDateTime(o.created_at)}</div>
+                      <div style="color:var(--ink-muted); font-size:11px; margin-top:2px;">${timeAgo(o.created_at)}</div>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
         </div>
       ` : ''}
     </div>
@@ -254,9 +275,11 @@ function render() {
 
   view.querySelectorAll('[data-action]').forEach(btn => {
     btn.addEventListener('click', async () => {
+      const orderId = btn.dataset.id;
+      const nextStatus = btn.dataset.action;
       try {
         btn.disabled = true;
-        await API.patch(`/api/orders/${btn.dataset.id}/status`, { status: btn.dataset.action });
+        await API.patch(`/api/orders/${orderId}/status`, { status: nextStatus });
         AudioFx.play('alert');
         await loadOrders();
         render();
@@ -269,7 +292,7 @@ function render() {
 }
 
 function renderOrderCard(order, allowAction = true) {
-  const elapsed = Math.floor((Date.now() - new Date(order.created_at.replace(' ', 'T') + 'Z').getTime()) / 60000);
+  const elapsed = elapsedMinutes(order.created_at);
   let slaClass = 'normal';
   if (elapsed >= 18) slaClass = 'delayed';
   else if (elapsed >= 10) slaClass = 'warning';

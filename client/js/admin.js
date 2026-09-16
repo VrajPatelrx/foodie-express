@@ -156,8 +156,8 @@ function render() {
         </div>
       </div>
 
-      <div style="overflow-x:auto;">
-        <table class="data">
+      <div class="table-responsive">
+        <table class="admin-table">
           <thead>
             <tr>
               <th>#</th>
@@ -167,7 +167,7 @@ function render() {
               <th>Assigned Rider</th>
               <th>Total</th>
               <th>Delivery PIN</th>
-              <th>Placed</th>
+              <th>Date & Time</th>
               <th>Manual Dispatch</th>
             </tr>
           </thead>
@@ -190,7 +190,10 @@ function render() {
                   <td>${o.rider_name || '<span style="color:var(--ink-muted);">Unassigned</span>'}</td>
                   <td style="font-weight:700;">₹${o.total}</td>
                   <td style="font-family:'JetBrains Mono',monospace; font-weight:700; color:var(--primary);">${o.delivery_otp || '—'}</td>
-                  <td style="color:var(--ink-muted); font-size:12px;">${timeAgo(o.created_at)}</td>
+                  <td>
+                    <div style="font-weight:700; font-size:12px;">${formatOrderDateTime(o.created_at)}</div>
+                    <div style="color:var(--ink-muted); font-size:11px;">${timeAgo(o.created_at)}</div>
+                  </td>
                   <td>
                     ${canManualAssign ? `
                       <div style="display:flex; gap:6px; align-items:center;">

@@ -367,18 +367,68 @@ function renderErrorScreen(container, options = {}) {
   }, 1000);
 }
 
+// ----------------------------------------------------
+// ACCURATE TIMEZONE-AWARE DATE & TIME UTILITIES
+// ----------------------------------------------------
+function parseDbDate(iso) {
+  if (!iso) return new Date();
+  if (iso instanceof Date) return iso;
+  let str = String(iso).trim();
+  // If SQLite format 'YYYY-MM-DD HH:MM:SS', replace space with 'T' and add 'Z' (SQLite CURRENT_TIMESTAMP is always UTC)
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(str)) {
+    str = str.replace(' ', 'T') + 'Z';
+  } else if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(str)) {
+    str = str + 'Z';
+  }
+  const d = new Date(str);
+  return isNaN(d.getTime()) ? new Date() : d;
+}
+
+function formatOrderDateTime(iso) {
+  if (!iso) return '—';
+  const d = parseDbDate(iso);
+  const now = new Date();
+
+  // Determine relative day label (Today, Yesterday, or DD Mon YYYY)
+  const isToday = d.toDateString() === now.toDateString();
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const isYesterday = d.toDateString() === yesterday.toDateString();
+
+  const timeStr = d.toLocaleTimeString(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  });
+
+  if (isToday) {
+    return `Today, ${timeStr}`;
+  } else if (isYesterday) {
+    return `Yesterday, ${timeStr}`;
+  } else {
+    const isSameYear = d.getFullYear() === now.getFullYear();
+    const dateStr = d.toLocaleDateString(undefined, {
+      day: 'numeric',
+      month: 'short',
+      ...(isSameYear ? {} : { year: 'numeric' })
+    });
+    return `${dateStr}, ${timeStr}`;
+  }
+}
+
 function timeAgo(iso) {
   if (!iso) return 'just now';
-  const d = new Date(iso.replace(' ', 'T') + 'Z');
+  const d = parseDbDate(iso);
   const secs = Math.floor((Date.now() - d.getTime()) / 1000);
   if (secs < 60) return `${Math.max(1, secs)}s ago`;
   if (secs < 3600) return `${Math.floor(secs / 60)}m ago`;
-  return `${Math.floor(secs / 3600)}h ago`;
+  if (secs < 86400) return `${Math.floor(secs / 3600)}h ago`;
+  return `${Math.floor(secs / 86400)}d ago`;
 }
 
 function elapsedMinutes(iso) {
   if (!iso) return 0;
-  const d = new Date(iso.replace(' ', 'T') + 'Z');
+  const d = parseDbDate(iso);
   return Math.max(0, Math.floor((Date.now() - d.getTime()) / 60000));
 }
 
