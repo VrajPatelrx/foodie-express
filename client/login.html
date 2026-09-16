@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign In · Foodie Express</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#FF5200">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="FoodieExpress">
+<link rel="apple-touch-icon" href="icons/icon.svg">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body style="background:var(--bg); min-height:100vh; display:flex; flex-direction:column;">
+<div class="app-shell" style="max-width:540px; margin:auto; padding-top:40px; padding-bottom:60px;">
+
+  <!-- Brand -->
+  <div style="text-align:center; margin-bottom:24px;">
+    <div class="brand" style="justify-content:center; font-size:26px;">
+      <div class="brand-icon">🍔</div>
+      <div>FOODIE <span>EXPRESS</span></div>
+    </div>
+    <p style="color:var(--ink-secondary); font-size:14px; margin:6px 0 0;">
+      On-Demand Food & Grocery Logistics Network
+    </p>
+  </div>
+
+  <!-- 1-Click Quick Demo Login Bar -->
+  <div class="card" style="background:linear-gradient(135deg, #FFF7ED, #FFFAF5); border:1.5px dashed var(--primary); margin-bottom:24px;">
+    <div style="font-size:12px; font-weight:800; text-transform:uppercase; color:var(--primary); letter-spacing:0.05em; margin-bottom:10px; display:flex; align-items:center; gap:6px;">
+      <span>⚡</span> 1-Click Quick Demo Access (For Evaluators)
+    </div>
+    <div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:8px;">
+      <button class="btn-secondary demo-btn" data-role="CUSTOMER" style="font-size:12px; padding:8px 10px; justify-content:flex-start;">
+        🧑‍🍳 <strong>Customer:</strong> Aarav
+      </button>
+      <button class="btn-secondary demo-btn" data-role="VENDOR" style="font-size:12px; padding:8px 10px; justify-content:flex-start;">
+        🏪 <strong>Kitchen:</strong> Anand Tiffin
+      </button>
+      <button class="btn-secondary demo-btn" data-role="RIDER" style="font-size:12px; padding:8px 10px; justify-content:flex-start;">
+        🛵 <strong>Rider:</strong> Ramesh
+      </button>
+      <button class="btn-secondary demo-btn" data-role="ADMIN" style="font-size:12px; padding:8px 10px; justify-content:flex-start;">
+        📊 <strong>Admin:</strong> Operations
+      </button>
+    </div>
+  </div>
+
+  <!-- Auth Card -->
+  <div class="card" style="padding:28px;">
+    <!-- Switcher Tabs -->
+    <div style="display:flex; border-bottom:1px solid var(--border); margin-bottom:20px;">
+      <button id="tabLogin" class="tab-btn active" style="flex:1; padding:10px; background:none; border:none; border-bottom:2px solid var(--primary); font-weight:800; font-size:15px; cursor:pointer; color:var(--ink);">
+        Sign In
+      </button>
+      <button id="tabRegister" class="tab-btn" style="flex:1; padding:10px; background:none; border:none; border-bottom:2px solid transparent; font-weight:600; font-size:15px; cursor:pointer; color:var(--ink-secondary);">
+        Register New User
+      </button>
+    </div>
+
+    <!-- Login Form -->
+    <form id="loginForm">
+      <div style="margin-bottom:14px;">
+        <label>Email Address</label>
+        <input type="email" id="loginEmail" placeholder="e.g. customer@foodie.com" required value="customer@foodie.com">
+      </div>
+      <div style="margin-bottom:20px;">
+        <label>Password</label>
+        <input type="password" id="loginPassword" placeholder="••••••••" required value="foodie123">
+        <div style="font-size:11px; color:var(--ink-muted); margin-top:4px;">Default seed password: <code>foodie123</code></div>
+      </div>
+      <button type="submit" class="btn-primary" style="width:100%; padding:12px; font-size:15px;">
+        Sign In to Portal →
+      </button>
+    </form>
+
+    <!-- Register Form -->
+    <form id="registerForm" style="display:none;">
+      <div style="margin-bottom:12px;">
+        <label>Full Name</label>
+        <input type="text" id="regName" placeholder="e.g. Rahul Sharma" required>
+      </div>
+      <div style="margin-bottom:12px;">
+        <label>10-Digit Mobile Number</label>
+        <input type="tel" id="regPhone" placeholder="e.g. 9876543210" maxlength="10" required>
+      </div>
+      <div style="margin-bottom:12px;">
+        <label>Email Address</label>
+        <input type="email" id="regEmail" placeholder="e.g. rahul@gmail.com" required>
+      </div>
+      <div style="margin-bottom:14px;">
+        <label>Password (Min 6 Characters)</label>
+        <input type="password" id="regPassword" placeholder="Create password" minlength="6" required>
+      </div>
+      <div style="margin-bottom:20px;">
+        <label>Select Your Role</label>
+        <select id="regRole">
+          <option value="CUSTOMER">Customer (Order Food & Groceries)</option>
+          <option value="RIDER">Delivery Partner (Ride & Earn)</option>
+        </select>
+      </div>
+      <button type="submit" class="btn-primary" style="width:100%; padding:12px; font-size:15px;">
+        Create Account →
+      </button>
+    </form>
+  </div>
+
+  <div style="text-align:center; margin-top:20px;">
+    <a href="index.html" class="back-link">← Return to Main Portal & Showcase</a>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="js/api.js"></script>
+<script src="js/login.js"></script>
+</body>
+</html>

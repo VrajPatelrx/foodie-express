@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF5200" />
+      <stop offset="100%" stop-color="#E04800" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="16" stdDeviation="20" flood-color="#000000" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+  <!-- Background Rounded App Tile -->
+  <rect width="512" height="512" rx="112" fill="url(#grad)" />
+  <!-- Center Badge Circle -->
+  <circle cx="256" cy="230" r="145" fill="#FFFFFF" opacity="0.18" />
+  <!-- Food / Delivery Icon Graphic -->
+  <text x="256" y="275" font-size="160" text-anchor="middle" filter="url(#shadow)">🍔</text>
+  <!-- Brand Label -->
+  <text x="256" y="425" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-weight="900" font-size="46" fill="#FFFFFF" text-anchor="middle" letter-spacing="4">FOODIE</text>
+  <text x="256" y="465" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-weight="700" font-size="22" fill="#FFE0D3" text-anchor="middle" letter-spacing="6">EXPRESS</text>
+</svg>

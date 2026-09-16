@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4-in-1 Live Simulator · Foodie Express</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body style="background:#0F172A; color:#fff;">
+<div style="padding:16px 24px;">
+
+  <!-- Showcase Top Action Bar -->
+  <div style="background:#1E293B; border:1px solid #334155; border-radius:var(--radius); padding:14px 20px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:16px; margin-bottom:16px;">
+    <div style="display:flex; align-items:center; gap:14px;">
+      <div class="brand-icon" style="background:var(--primary); width:40px; height:40px; font-size:22px;">⚡</div>
+      <div>
+        <div style="font-size:18px; font-weight:800; color:#fff;">FOODIE <span style="color:var(--primary);">EXPRESS</span> · Multi-Role Live Showcase</div>
+        <div style="font-size:12px; color:#94A3B8;">4 Synchronized Roles on a Single Screen · Real-time Socket.io State Machine</div>
+      </div>
+    </div>
+
+    <!-- Simulator Control -->
+    <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+      <div id="simStatusPill" style="font-size:12px; font-weight:700; background:#334155; color:#E2E8F0; padding:6px 14px; border-radius:999px;">
+        ⚪ Ready for Simulation
+      </div>
+
+      <button id="runSimBtn" class="btn-primary" style="box-shadow:0 0 15px rgba(255,82,0,0.5);">
+        ▶ Run 1-Click Auto Simulation
+      </button>
+
+      <a href="index.html" class="btn-secondary" style="background:#334155; color:#fff; border-color:#475569; font-size:12px; padding:8px 14px;">
+        ⇄ Role Selector
+      </a>
+    </div>
+  </div>
+
+  <!-- 4-in-1 Grid -->
+  <div class="showcase-grid">
+    <!-- Panel 1: Customer -->
+    <div class="showcase-panel">
+      <div class="showcase-panel-header">
+        <span style="display:flex; align-items:center; gap:8px;">
+          <span>🧑‍🍳</span> <strong>Customer App</strong>
+        </span>
+        <a href="customer.html" target="_blank" style="font-size:11px; color:var(--primary);">Open Full ↗</a>
+      </div>
+      <iframe id="frameCustomer" src="customer.html"></iframe>
+    </div>
+
+    <!-- Panel 2: Kitchen KDS -->
+    <div class="showcase-panel">
+      <div class="showcase-panel-header">
+        <span style="display:flex; align-items:center; gap:8px;">
+          <span>🏪</span> <strong>Kitchen Display (KDS)</strong>
+        </span>
+        <a href="vendor.html" target="_blank" style="font-size:11px; color:var(--primary);">Open Full ↗</a>
+      </div>
+      <iframe id="frameVendor" src="vendor.html"></iframe>
+    </div>
+
+    <!-- Panel 3: Rider Partner -->
+    <div class="showcase-panel">
+      <div class="showcase-panel-header">
+        <span style="display:flex; align-items:center; gap:8px;">
+          <span>🛵</span> <strong>Rider Partner</strong>
+        </span>
+        <a href="rider.html" target="_blank" style="font-size:11px; color:var(--primary);">Open Full ↗</a>
+      </div>
+      <iframe id="frameRider" src="rider.html"></iframe>
+    </div>
+
+    <!-- Panel 4: Operations Admin -->
+    <div class="showcase-panel">
+      <div class="showcase-panel-header">
+        <span style="display:flex; align-items:center; gap:8px;">
+          <span>📊</span> <strong>Admin Console</strong>
+        </span>
+        <a href="admin.html" target="_blank" style="font-size:11px; color:var(--primary);">Open Full ↗</a>
+      </div>
+      <iframe id="frameAdmin" src="admin.html"></iframe>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.4/dist/confetti.browser.min.js"></script>
+<script src="/socket.io/socket.io.js"></script>
+<script src="js/api.js"></script>
+<script src="js/showcase.js"></script>
+</body>
+</html>

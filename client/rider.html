@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rider Delivery Partner · Foodie Express</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#FF5200">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="FoodieExpress">
+<link rel="apple-touch-icon" href="icons/icon.svg">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="app-shell">
+  <div class="masthead">
+    <div class="brand">
+      <div class="brand-icon">🛵</div>
+      <div>FOODIE <span>EXPRESS</span></div>
+    </div>
+    <div class="header-actions">
+      <button id="pwaInstallBtn" class="btn-secondary hide-mobile" onclick="PWA.install()" style="display:none; padding:5px 10px; font-size:11px; color:var(--primary); border-color:var(--primary);">
+        📱 App
+      </button>
+      <a class="btn-secondary hide-mobile" href="index.html" style="padding:6px 12px; font-size:12px;">⇄ Switch Role</a>
+      <div class="role-tag hide-mobile" id="activeRiderTag">Delivery Partner</div>
+    </div>
+  </div>
+
+  <div id="view"></div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="js/api.js"></script>
+<script src="js/rider.js"></script>
+</body>
+</html>

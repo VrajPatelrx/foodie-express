@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Foodie Express · On-Demand Delivery Platform</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#FF5200">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="FoodieExpress">
+<link rel="apple-touch-icon" href="icons/icon.svg">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="app-shell">
+  <div class="masthead">
+    <div class="brand">
+      <div class="brand-icon">🍔</div>
+      <div>FOODIE <span>EXPRESS</span></div>
+    </div>
+    <div class="header-actions" id="indexHeaderActions">
+      <button id="phoneModalBtn" class="btn-secondary hide-mobile" style="padding:7px 14px; font-size:13px; color:var(--primary); border-color:var(--primary);">
+        📱 Open on Phone
+      </button>
+      <button id="pwaInstallBtn" class="btn-secondary hide-mobile" onclick="PWA.install()" style="display:none; padding:7px 14px; font-size:13px; color:var(--primary); border-color:var(--primary);">
+        📱 Install App
+      </button>
+      <a class="btn-primary" href="login.html" style="padding:6px 14px; font-size:12px; white-space:nowrap; border-radius:8px;">🔐 Sign In</a>
+      <div class="role-tag hide-mobile">Production Logistics System</div>
+    </div>
+  </div>
+
+  <div style="margin-bottom:28px;">
+    <h1 style="font-size:26px; margin-bottom:8px;">Real-Time Food & Grocery Delivery Network</h1>
+    <p style="color:var(--ink-secondary); max-width:640px; font-size:15px; margin:0;">
+      A comprehensive on-demand delivery platform featuring user role authentication, saved address books,
+      instant GPS current location detection, Kitchen Display KDS Kanban, and 4-digit Delivery PIN security.
+    </p>
+  </div>
+
+  <div class="role-pick">
+    <!-- Featured 4-in-1 God Mode Simulator -->
+    <a class="role-card featured" href="showcase.html">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+        <div class="glyph">⚡</div>
+        <span class="badge" style="background:var(--primary); color:#fff;">Evaluator / Demo Mode</span>
+      </div>
+      <h3>4-in-1 Live Showcase & Simulation</h3>
+      <p>
+        View all 4 roles (Customer, Kitchen KDS, Rider, Admin) synchronized side-by-side on one screen. Includes a 
+        <strong>"1-Click Auto Simulation"</strong> button to watch an entire order lifecycle execute end-to-end!
+      </p>
+    </a>
+
+    <!-- Customer -->
+    <a class="role-card" href="customer.html">
+      <div class="glyph">🧑‍🍳</div>
+      <h3>Customer Portal</h3>
+      <p>1-Click checkout with saved address book, fast GPS location detection, 100% pure veg menus, and live route tracking.</p>
+    </a>
+
+    <!-- Vendor / Kitchen -->
+    <a class="role-card" href="vendor.html">
+      <div class="glyph">🏪</div>
+      <h3>Restaurant Kitchen (KDS)</h3>
+      <p>3-column Kanban board for incoming, cooking, and ready orders with audio chimes, live SLA delay timers, and menu stock controls.</p>
+    </a>
+
+    <!-- Rider -->
+    <a class="role-card" href="rider.html">
+      <div class="glyph">🛵</div>
+      <h3>Delivery Partner Portal</h3>
+      <p>Duty toggle (Online/Offline), turn-by-turn progression, trip earnings tracker, and customer 4-digit PIN verification modal.</p>
+    </a>
+
+    <!-- Admin -->
+    <a class="role-card" href="admin.html">
+      <div class="glyph">📊</div>
+      <h3>Operations & Finance Admin</h3>
+      <p>Real-time platform financial economics (GOV, 18% commission, net margin), fleet availability, and manual dispatcher overrides.</p>
+    </a>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script>
+  // Dynamic user session check
+  try {
+    const user = JSON.parse(localStorage.getItem('fe_user'));
+    if (user) {
+      const container = document.getElementById('indexHeaderActions');
+      container.innerHTML = `
+        <button id="phoneModalBtn" class="btn-secondary hide-mobile" style="padding:6px 12px; font-size:12px; color:var(--primary); border-color:var(--primary);">
+          📱 Open on Phone
+        </button>
+        <button id="pwaInstallBtn" class="btn-secondary hide-mobile" onclick="PWA.install()" style="display:none; padding:6px 12px; font-size:12px; color:var(--primary); border-color:var(--primary);">
+          📱 Install App
+        </button>
+        <div class="header-user-pill" title="${user.name} (${user.role})">
+          <span class="user-avatar-micro">👤</span>
+          <span class="user-display-name">${user.name.split(' ')[0]}</span>
+        </div>
+        <button id="idxLogout" class="btn-secondary idx-logout-btn">Sign Out</button>
+      `;
+      document.getElementById('idxLogout').addEventListener('click', () => {
+        localStorage.removeItem('fe_user');
+        localStorage.removeItem('fe_token');
+        location.reload();
+      });
+      if (PWA.deferredPrompt) {
+        document.getElementById('pwaInstallBtn').style.display = 'inline-flex';
+      }
+    }
+  } catch (e) {}
+
+  // Open on Phone QR Code Modal Handler
+  function openPhoneModal() {
+    fetch('/api/network-info').then(r => r.json()).then(net => {
+      let useHttps = true;
+      const staticDomain = 'https://divina-nondiscordant-malissa.ngrok-free.dev';
+      const overlay = document.createElement('div');
+      overlay.className = 'modal-overlay';
+
+      function render() {
+        const activeUrl = useHttps ? staticDomain : net.localUrl;
+        overlay.innerHTML = `
+          <div class="modal-card" style="max-width:440px; text-align:center;">
+            <div style="font-size:36px; margin-bottom:6px;">📱</div>
+            <h3 style="font-size:19px; margin-bottom:4px;">Open on Real Mobile Phone</h3>
+            <p style="font-size:13px; color:var(--ink-secondary); margin:0 0 14px;">
+              Scan this QR code with your smartphone camera to launch Foodie Express!
+            </p>
+
+            <div style="display:flex; justify-content:center; gap:8px; margin-bottom:14px;">
+              <button class="btn-secondary" id="toggleHttpsBtn" style="padding:6px 14px; font-size:12px; border-radius:999px; ${useHttps ? 'background:var(--primary); color:#fff; border-color:var(--primary); font-weight:700;' : ''}">
+                🔒 Permanent HTTPS (Recommended)
+              </button>
+              <button class="btn-secondary" id="toggleWifiBtn" style="padding:6px 14px; font-size:12px; border-radius:999px; ${!useHttps ? 'background:var(--primary); color:#fff; border-color:var(--primary); font-weight:700;' : ''}">
+                📶 Local Wi-Fi
+              </button>
+            </div>
+
+            <div style="background:#fff; padding:12px; display:inline-block; border-radius:var(--radius); border:2px solid var(--border); margin-bottom:14px; box-shadow:var(--shadow-sm);">
+              <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(activeUrl)}" alt="Scan QR Code" style="display:block; width:180px; height:180px;">
+            </div>
+
+            <div style="background:var(--surface-alt); padding:10px 14px; border-radius:var(--radius-sm); border:1px solid var(--border); font-size:13px; margin-bottom:14px; word-break:break-all;">
+              <div style="font-size:11px; font-weight:700; color:var(--ink-secondary); text-transform:uppercase; margin-bottom:2px;">
+                ${useHttps ? '🔒 Permanent Fixed HTTPS Address' : '📶 Local Wi-Fi Address'}
+              </div>
+              <code style="font-weight:800; font-size:13px; color:var(--primary);">${activeUrl}</code>
+            </div>
+
+            <div style="font-size:12px; color:var(--ink-secondary); text-align:left; background:#FFF7ED; border:1px dashed var(--primary); padding:10px 12px; border-radius:var(--radius-sm); margin-bottom:16px;">
+              <strong>💡 Permanent Domain Activated!</strong><br>
+              This link <strong>never changes</strong>. Run <code>npm run tunnel</code> or double-click <code>tunnel.bat</code> to connect.
+            </div>
+
+            <button class="btn-secondary" id="closePhoneModal" style="width:100%;">Close</button>
+          </div>
+        `;
+
+        overlay.querySelector('#closePhoneModal').addEventListener('click', () => overlay.remove());
+        overlay.querySelector('#toggleHttpsBtn').addEventListener('click', () => { useHttps = true; render(); });
+        overlay.querySelector('#toggleWifiBtn').addEventListener('click', () => { useHttps = false; render(); });
+      }
+
+      render();
+      document.body.appendChild(overlay);
+    }).catch(err => {
+      alert('Could not fetch network IP: ' + err.message);
+    });
+  }
+
+  document.addEventListener('click', (e) => {
+    if (e.target && e.target.id === 'phoneModalBtn') {
+      openPhoneModal();
+    }
+  });
+</script>
+</body>
+</html>

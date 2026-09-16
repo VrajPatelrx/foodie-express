@@ -1,0 +1,20 @@
+{
+  "name": "foodie-express",
+  "version": "1.0.0",
+  "description": "Foodie Express - a locally-running food & grocery delivery platform (Customer, Vendor, Rider, Admin) built for a Software Engineering practical project.",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js",
+    "tunnel": ".\\scripts\\ngrok.exe http --url=https://divina-nondiscordant-malissa.ngrok-free.dev 3000",
+    "reset-db": "node -e \"require('./database/seed.js')\""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "better-sqlite3": "^12.11.1",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "socket.io": "^4.8.3"
+  }
+}
