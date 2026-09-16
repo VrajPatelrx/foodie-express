@@ -86,16 +86,16 @@ const STATUS_LABEL = {
 };
 
 const STATUS_ICONS = {
-  PLACED: '📝',
-  ACCEPTED: '👨‍🍳',
-  PREPARING: '🍳',
-  READY: '📦',
-  ASSIGNED: '🛵',
-  PICKED_UP: '🥡',
-  OUT_FOR_DELIVERY: '🚀',
-  DELIVERED: '🎉',
-  REJECTED: '❌',
-  CANCELLED: '🛑',
+  PLACED: '<span class="status-dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#2563EB;margin-right:4px;"></span>',
+  ACCEPTED: '<span class="status-dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#7C3AED;margin-right:4px;"></span>',
+  PREPARING: '<span class="status-dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#D97706;margin-right:4px;"></span>',
+  READY: '<span class="status-dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#FF5200;margin-right:4px;"></span>',
+  ASSIGNED: '<span class="status-dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#2563EB;margin-right:4px;"></span>',
+  PICKED_UP: '<span class="status-dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#4F46E5;margin-right:4px;"></span>',
+  OUT_FOR_DELIVERY: '<span class="status-dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#2563EB;margin-right:4px;"></span>',
+  DELIVERED: '<span class="status-dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#16A34A;margin-right:4px;"></span>',
+  REJECTED: '<span class="status-dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#DC2626;margin-right:4px;"></span>',
+  CANCELLED: '<span class="status-dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#94A3B8;margin-right:4px;"></span>',
 };
 
 // Web Audio API Synthesizer (zero MP3 files required, pure browser synthesis)

@@ -15,17 +15,19 @@ let state = {
   cart: {}, // menu_item_id -> qty
   searchQuery: '',
   selectedCategory: 'All',
-  vegOnly: false,
+  appliedCoupon: null, // { code, discount, freeDelivery, description }
+  paymentMethod: 'UPI',
   customerName: (currentUser && currentUser.name) || localStorage.getItem('fe_customer_name') || 'Aarav Patel',
   customerPhone: (currentUser && currentUser.phone) || localStorage.getItem('fe_customer_phone') || '9876543210',
   customerEmail: (currentUser && currentUser.email) || localStorage.getItem('fe_customer_email') || 'aarav@foodie.com',
   customerAddress: localStorage.getItem('fe_customer_address') || 'Flat 402, Sunshine Heights, Anand',
   destCoords: null, // { lat, lng } from GPS
   savedAddresses: [],
-  trackingOrderId: null, // Only populated when an order is genuinely active
+  trackingOrderId: null,
   currentOrder: null,
   mapInstance: null,
   riderMarker: null,
+  routePolyline: null,
   allOrders: [],
 };
 
@@ -38,11 +40,10 @@ function detectFastGps(onSuccess, onError) {
     return;
   }
 
-  // Tier 1: Fast cached / network position (returns in ~100ms on mobile cell/Wi-Fi)
+  // Tier 1: Fast cached / network position (~100ms on mobile cell/Wi-Fi)
   navigator.geolocation.getCurrentPosition(
     (pos) => onSuccess(pos.coords.latitude, pos.coords.longitude),
     (err) => {
-      // If permission was explicitly denied by user, do not retry
       if (err.code === 1) {
         onError(err);
         return;
@@ -80,6 +81,7 @@ function switchScreen(screen, trackHistory = true) {
   });
 
   render();
+  updateFloatingCart();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -115,26 +117,26 @@ function updateHeaderUser() {
 
   if (currentUser) {
     headerActions.innerHTML = `
-      <button id="pwaInstallBtn" class="btn-secondary hide-mobile" onclick="PWA.install()" style="display:none; padding:5px 10px; font-size:11px; color:var(--primary); border-color:var(--primary);">
-        📱 App
+      <button id="pwaInstallBtn" class="btn-secondary hide-mobile" onclick="PWA.install()" style="display:none; padding:5px 10px; font-size:11px; color:var(--primary); border-color:var(--primary); align-items:center; gap:5px;">
+        ${Icons.phone(13)} Install App
       </button>
       <div class="header-user-pill" title="${currentUser.name}">
-        <span class="user-avatar-micro">👤</span>
+        <span class="user-avatar-micro" style="display:flex; align-items:center;">${Icons.customer(15)}</span>
         <span class="user-display-name">${currentUser.name.split(' ')[0]}</span>
       </div>
-      <a class="btn-secondary hide-mobile" href="index.html" style="padding:5px 10px; font-size:12px;">⇄ Switch</a>
+      <a class="btn-secondary hide-mobile" href="index.html" style="padding:5px 10px; font-size:12px; display:inline-flex; align-items:center; gap:5px;">⇄ Switch</a>
     `;
   } else {
     headerActions.innerHTML = `
-      <button id="pwaInstallBtn" class="btn-secondary hide-mobile" onclick="PWA.install()" style="display:none; padding:5px 10px; font-size:11px; color:var(--primary); border-color:var(--primary);">
-        📱 App
+      <button id="pwaInstallBtn" class="btn-secondary hide-mobile" onclick="PWA.install()" style="display:none; padding:5px 10px; font-size:11px; color:var(--primary); border-color:var(--primary); align-items:center; gap:5px;">
+        ${Icons.phone(13)} Install App
       </button>
-      <a class="btn-primary" href="login.html" style="padding:5px 12px; font-size:12px; white-space:nowrap; border-radius:8px;">Sign In</a>
-      <a class="btn-secondary hide-mobile" href="index.html" style="padding:5px 10px; font-size:12px;">⇄ Switch</a>
+      <a class="btn-primary" href="login.html" style="padding:6px 14px; font-size:12px; white-space:nowrap; border-radius:8px;">Sign In</a>
+      <a class="btn-secondary hide-mobile" href="index.html" style="padding:5px 10px; font-size:12px; display:inline-flex; align-items:center; gap:5px;">⇄ Switch</a>
     `;
   }
 
-  if (PWA && PWA.deferredPrompt) {
+  if (window.PWA && PWA.deferredPrompt) {
     const btn = document.getElementById('pwaInstallBtn');
     if (btn) btn.style.display = 'inline-flex';
   }
@@ -171,6 +173,62 @@ async function updateOrderBadges() {
 }
 
 // ----------------------------------------------------
+// CART & PRICING CALCULATIONS
+// ----------------------------------------------------
+function cartCount() {
+  return Object.values(state.cart).reduce((a, b) => a + b, 0);
+}
+
+function cartSubtotal() {
+  let total = 0;
+  for (const [id, qty] of Object.entries(state.cart)) {
+    const item = state.menu.find(m => String(m.id) === String(id));
+    if (item) total += item.price * qty;
+  }
+  return total;
+}
+const cartTotal = cartSubtotal;
+
+function getDeliveryFee() {
+  if (state.appliedCoupon && state.appliedCoupon.freeDelivery) return 0;
+  return 25;
+}
+
+function getDiscountAmount() {
+  if (!state.appliedCoupon) return 0;
+  return state.appliedCoupon.discount || 0;
+}
+
+function getFinalPayable() {
+  const sub = cartSubtotal();
+  const fee = getDeliveryFee();
+  const disc = getDiscountAmount();
+  return Math.max(0, sub + fee - disc);
+}
+
+function updateFloatingCart() {
+  const bar = document.getElementById('floatingCart');
+  if (!bar) return;
+
+  const count = cartCount();
+  if (count > 0 && state.screen === 'menu') {
+    bar.classList.add('visible');
+    const countEl = document.getElementById('floatingCartCount');
+    const priceEl = document.getElementById('floatingCartPrice');
+    if (countEl) countEl.textContent = `${count} ${count === 1 ? 'ITEM' : 'ITEMS'}`;
+    if (priceEl) priceEl.textContent = `₹${cartTotal()}`;
+  } else {
+    bar.classList.remove('visible');
+  }
+}
+
+window.showCartModal = function() {
+  if (cartCount() > 0) {
+    openCheckoutModal();
+  }
+};
+
+// ----------------------------------------------------
 // INITIALIZATION
 // ----------------------------------------------------
 async function init() {
@@ -193,7 +251,7 @@ async function init() {
 
     await updateOrderBadges();
 
-    // Support deep-linking via query parameters (?screen=browse|orders|addresses|profile, ?rest=1, ?order=15)
+    // Deep-linking support (?screen=..., ?rest=..., ?order=...)
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('rest')) {
       await openRestaurantMenu(Number(urlParams.get('rest')));
@@ -211,18 +269,18 @@ async function init() {
   } catch (err) {
     console.error('Failed to init customer app:', err);
     renderErrorScreen(view, {
-      title: "The Kitchen is Taking a Quick Breather!",
-      desc: "Our servers need a moment to cool down the pans and refresh the menu. Don't worry, our chefs and delivery fleet are on standby!",
-      badge: "Kitchen Standby",
+      title: "Service Temporarily Unavailable",
+      desc: "Our servers are refreshing kitchen menus and driver dispatches. Please retry in a moment.",
+      badge: "Connection Error",
       error: err,
       onRetry: () => location.reload(),
-      retryText: "Reconnect Kitchen",
+      retryText: "Retry Connection",
       showSwitchRole: true
     });
   }
 }
 
-// Live Socket Order Updates
+// Live Socket Updates
 socket.on('order:update', (order) => {
   updateOrderBadges();
 
@@ -232,9 +290,7 @@ socket.on('order:update', (order) => {
       localStorage.removeItem('fe_last_order_id');
       const trackBtn = document.getElementById('trackActiveOrderBtn');
       if (trackBtn) trackBtn.remove();
-      if (state.screen === 'browse') {
-        renderBrowse();
-      }
+      if (state.screen === 'browse') renderBrowse();
     }
   }
 
@@ -258,19 +314,6 @@ socket.on('order:update', (order) => {
   }
 });
 
-function cartCount() {
-  return Object.values(state.cart).reduce((a, b) => a + b, 0);
-}
-
-function cartTotal() {
-  let total = 0;
-  for (const [id, qty] of Object.entries(state.cart)) {
-    const item = state.menu.find(m => String(m.id) === String(id));
-    if (item) total += item.price * qty;
-  }
-  return total;
-}
-
 // ----------------------------------------------------
 // MASTER ROUTER
 // ----------------------------------------------------
@@ -293,41 +336,46 @@ function renderBrowse() {
   });
 
   view.innerHTML = `
-    <!-- Pure Veg Platform Trust Banner -->
-    <div class="pure-veg-banner">
-      <div style="display:flex; align-items:center; gap:10px;">
-        <span style="font-size:24px;">🥗</span>
-        <div>
-          <div style="font-weight:800; font-size:14px; color:#15803d;">100% Pure Vegetarian Express</div>
-          <div style="font-size:12px; color:#166534; opacity:0.9;">Delivering Anand's best pure veg restaurants, thalis & snacks in minutes</div>
-        </div>
-      </div>
-      <span class="pure-veg-tag" style="background:#fff; border-color:#86efac;">🌿 100% PURE VEG</span>
+    <div style="margin-bottom:20px;">
+      <h1 style="font-size:22px; font-weight:800; margin:0 0 6px; letter-spacing:-0.02em;">Order food in Anand</h1>
+      <p style="color:var(--ink-secondary); font-size:13.5px; margin:0;">
+        Explore top rated kitchens, quick snacks and meals delivered in minutes.
+      </p>
     </div>
 
-    <div class="filter-bar">
+    <div class="filter-bar" style="margin-bottom:22px;">
       <div class="search-box">
-        <span class="icon">🔍</span>
-        <input type="text" id="restSearch" placeholder="Search pure veg restaurants or cuisines (e.g. Thali, Pizza, Biryani)..." value="${state.searchQuery}">
+        <span class="icon" style="display:flex; align-items:center;">${Icons.search(16)}</span>
+        <input type="text" id="restSearch" placeholder="Search restaurants or cuisines (e.g. Gujarati, Thali, Snacks)..." value="${state.searchQuery}">
       </div>
       ${state.trackingOrderId ? `
-        <button class="btn-primary" id="trackActiveOrderBtn">📍 Track Active Order #${state.trackingOrderId}</button>
+        <button class="btn-primary" id="trackActiveOrderBtn" style="display:inline-flex; align-items:center; gap:6px;">
+          ${Icons.location(14)} Live Order #${state.trackingOrderId} →
+        </button>
       ` : ''}
     </div>
 
     <div class="grid cols-3">
       ${filtered.map(r => `
-        <div class="rest-card" data-id="${r.id}">
-          <div class="banner">${r.emoji}</div>
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-            <h3 style="margin:0;">${r.name}</h3>
-            <span class="pure-veg-tag" style="font-size:9.5px; padding:1px 5px;"><span class="veg-dot" style="width:11px; height:11px;"></span> VEG</span>
+        <div class="rest-card" data-id="${r.id}" style="cursor:pointer;">
+          <div class="banner" style="background:var(--surface-alt); display:flex; align-items:center; justify-content:center; height:120px; border-radius:var(--radius-sm); margin-bottom:12px;">
+            <div style="width:52px; height:52px; border-radius:50%; background:var(--primary-soft); display:flex; align-items:center; justify-content:center; color:var(--primary);">
+              ${Icons.kitchen(26, 'var(--primary)')}
+            </div>
           </div>
-          <div class="cuisine">${r.cuisine}</div>
-          <div class="meta-row" style="display:flex; align-items:center; gap:6px;">
-            <span class="rating">⭐ ${r.rating}</span>
-            <span class="dot">•</span>
-            <span>⚡ ${r.eta_minutes ? r.eta_minutes + ' mins' : '25 mins'}</span>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+            <h3 style="margin:0; font-size:16px; font-weight:700;">${r.name}</h3>
+            ${Icons.veg(13)}
+          </div>
+          <div class="cuisine" style="font-size:12.5px; color:var(--ink-secondary); margin-bottom:8px;">${r.cuisine}</div>
+          <div class="meta-row" style="display:flex; align-items:center; gap:8px; font-size:12px;">
+            <span class="rating" style="display:inline-flex; align-items:center; gap:3px; font-weight:700; background:var(--surface-alt); padding:2px 6px; border-radius:4px;">
+              ${Icons.star(12)} ${r.rating}
+            </span>
+            <span style="color:var(--border-strong);">•</span>
+            <span style="display:inline-flex; align-items:center; gap:4px; color:var(--ink-secondary);">
+              ${Icons.clock(12)} ${r.eta_minutes ? r.eta_minutes + ' mins' : '25 mins'}
+            </span>
             <span style="margin-left:auto; font-weight:700; color:var(--ink-secondary);">Min ₹99</span>
           </div>
         </div>
@@ -345,9 +393,7 @@ function renderBrowse() {
 
   const trackBtn = document.getElementById('trackActiveOrderBtn');
   if (trackBtn) {
-    trackBtn.addEventListener('click', () => {
-      switchScreen('tracking');
-    });
+    trackBtn.addEventListener('click', () => switchScreen('tracking'));
   }
 
   document.querySelectorAll('.rest-card').forEach(card => {
@@ -359,7 +405,7 @@ function renderBrowse() {
 }
 
 // ----------------------------------------------------
-// 2. RESTAURANT MENU SCREEN (100% PURE VEG)
+// 2. RESTAURANT MENU SCREEN
 // ----------------------------------------------------
 async function openRestaurantMenu(restId) {
   const rest = state.restaurants.find(r => r.id === restId);
@@ -369,14 +415,20 @@ async function openRestaurantMenu(restId) {
   }
   state.activeRestaurant = rest;
   state.cart = {};
+  state.appliedCoupon = null;
   state.selectedCategory = 'All';
-  state.vegOnly = true;
   state.screen = 'menu';
 
+  // Skeleton shimmer placeholder
   view.innerHTML = `
-    <div class="card" style="text-align:center; padding:50px 20px;">
-      <div style="font-size:36px; margin-bottom:8px;">⏳</div>
-      <h3>Loading Pure Veg Menu from ${rest.name}...</h3>
+    <div style="margin-bottom:18px;">
+      <div class="skeleton skeleton-title" style="height:32px; width:200px; margin-bottom:12px;"></div>
+      <div class="skeleton" style="height:80px; width:100%; border-radius:var(--radius);"></div>
+    </div>
+    <div class="skeleton-grid">
+      <div class="skeleton-card"><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-text"></div></div>
+      <div class="skeleton-card"><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-text"></div></div>
+      <div class="skeleton-card"><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-text"></div></div>
     </div>
   `;
 
@@ -384,6 +436,7 @@ async function openRestaurantMenu(restId) {
     const menu = await API.get(`/api/restaurants/${restId}/menu`);
     state.menu = menu;
     renderMenu();
+    updateFloatingCart();
   } catch (err) {
     toast(err.message, 'error');
   }
@@ -391,64 +444,69 @@ async function openRestaurantMenu(restId) {
 
 function renderMenu() {
   const rest = state.activeRestaurant;
-  const categories = ['All', ...new Set(state.menu.map(m => m.category))];
+  if (!rest) return;
 
+  const categories = ['All', ...new Set(state.menu.map(m => m.category))];
   const filteredMenu = state.menu.filter(item => {
-    const matchCat = state.selectedCategory === 'All' || item.category === state.selectedCategory;
-    return matchCat;
+    return state.selectedCategory === 'All' || item.category === state.selectedCategory;
   });
 
   view.innerHTML = `
-    <a href="#" class="back-link" id="backToRestaurants">← Back to Restaurants</a>
+    <a href="#" class="back-link" id="backToRestaurants" style="display:inline-flex; align-items:center; gap:5px; margin-bottom:14px; font-weight:600;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      All Restaurants
+    </a>
 
-    <div class="card rest-hero-card" style="margin-bottom:18px; display:flex; gap:14px; align-items:center;">
-      <div class="rest-hero-icon" style="font-size:38px; background:var(--primary-soft); width:64px; height:64px; border-radius:var(--radius); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
-        ${rest.emoji}
+    <!-- Restaurant Hero Card -->
+    <div class="card rest-hero-card" style="margin-bottom:18px; display:flex; gap:16px; align-items:center;">
+      <div style="width:64px; height:64px; border-radius:var(--radius); background:var(--primary-soft); display:flex; align-items:center; justify-content:center; color:var(--primary); flex-shrink:0;">
+        ${Icons.kitchen(28, 'var(--primary)')}
       </div>
       <div class="rest-hero-info" style="flex:1; min-width:0;">
-        <div style="display:flex; align-items:center; gap:6px; margin-bottom:3px; flex-wrap:wrap;">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:3px; flex-wrap:wrap;">
           <h2 style="font-size:20px; margin:0; word-break:break-word;">${rest.name}</h2>
-          <span class="pure-veg-tag" style="font-size:9.5px; padding:1px 6px;"><span class="veg-dot" style="width:11px; height:11px;"></span> 100% PURE VEG</span>
+          ${Icons.veg(13)}
         </div>
-        <div style="color:var(--ink-secondary); font-size:12.5px; margin-bottom:4px;">
-          ${rest.cuisine} • ⚡ ${rest.eta_minutes ? rest.eta_minutes + ' mins' : '25-30 mins'} delivery
+        <div style="color:var(--ink-secondary); font-size:12.5px; margin-bottom:6px;">
+          ${rest.cuisine} • Delivery in ${rest.eta_minutes ? rest.eta_minutes + ' mins' : '25-30 mins'}
         </div>
-        <div style="display:flex; align-items:center; gap:6px; font-size:12px; flex-wrap:wrap;">
-          <span class="rating">⭐ ${rest.rating}</span>
-          <span style="color:var(--ink-muted);">•</span>
-          <span style="color:var(--green); font-weight:700;">⚡ Accepting Orders</span>
+        <div style="display:flex; align-items:center; gap:8px; font-size:12px; flex-wrap:wrap;">
+          <span class="rating" style="display:inline-flex; align-items:center; gap:3px; font-weight:700;">
+            ${Icons.star(12)} ${rest.rating}
+          </span>
+          <span style="color:var(--border-strong);">•</span>
+          <span style="color:var(--green); font-weight:700; display:inline-flex; align-items:center; gap:4px;">
+            <span style="width:7px; height:7px; border-radius:50%; background:var(--green); display:inline-block;"></span> Accepting Orders
+          </span>
         </div>
       </div>
     </div>
 
-    <!-- Category Filter Bar (Smooth Horizontal Scrolling Pills) -->
-    <div class="filter-bar">
+    <!-- Category Filter Bar -->
+    <div class="filter-bar" style="margin-bottom:16px;">
       <div class="category-pills">
         ${categories.map(cat => `
           <button type="button" class="cat-pill ${state.selectedCategory === cat ? 'active' : ''}" data-cat="${cat}">${cat}</button>
         `).join('')}
       </div>
-      <div class="pure-veg-tag hide-mobile" style="margin-left:auto; padding:5px 10px;">
-        🌿 100% Pure Veg Kitchen
-      </div>
     </div>
 
-    <!-- Menu Items Grid -->
-    <div class="grid cols-2">
+    <!-- Dishes Grid -->
+    <div class="grid cols-2" style="margin-bottom:80px;">
       ${filteredMenu.map(item => `
         <div class="menu-item-card">
           <div class="info">
             <div style="display:flex; align-items:center; gap:6px; margin-bottom:4px;">
-              <span class="pure-veg-tag"><span class="veg-dot"></span> PURE VEG</span>
+              ${Icons.veg(12)}
               <span style="font-size:11px; color:var(--ink-muted); font-weight:600;">${item.category}</span>
             </div>
             <h4>${item.name}</h4>
-            <p>${item.description || 'Authentic pure vegetarian delicacy prepared fresh with premium spices & ingredients.'}</p>
+            <p>${item.description || 'Prepared fresh with premium ingredients & authentic spices.'}</p>
             <div class="price">₹${item.price}</div>
           </div>
           <div class="action">
             ${!item.is_available ? `
-              <span class="badge" style="background:var(--red-soft); color:var(--red); font-size:11px;">Sold Out</span>
+              <span class="badge" style="background:var(--surface-alt); color:var(--ink-muted); font-size:11px;">Sold Out</span>
             ` : state.cart[item.id] ? `
               <div class="qty-control">
                 <button class="qty-btn" data-action="dec" data-id="${item.id}">−</button>
@@ -464,19 +522,6 @@ function renderMenu() {
         </div>
       `).join('')}
     </div>
-
-    <!-- Floating Sticky Cart Bar -->
-    ${cartCount() > 0 ? `
-      <div class="cart-bar">
-        <div>
-          <div style="font-weight:800; font-size:15px;">${cartCount()} Pure Veg Item${cartCount() > 1 ? 's' : ''} added</div>
-          <div style="font-size:12.5px; opacity:0.9;">Total: ₹${cartTotal()} (Free Delivery)</div>
-        </div>
-        <button class="btn-primary" id="checkoutBtn" style="background:#fff; color:var(--ink); font-weight:800; padding:10px 20px; border-radius:999px;">
-          Proceed to Checkout →
-        </button>
-      </div>
-    ` : ''}
   `;
 
   document.getElementById('backToRestaurants').addEventListener('click', (e) => {
@@ -497,6 +542,7 @@ function renderMenu() {
       state.cart[id] = 1;
       AudioFx.play('click');
       renderMenu();
+      updateFloatingCart();
     });
   });
 
@@ -512,320 +558,455 @@ function renderMenu() {
       }
       AudioFx.play('click');
       renderMenu();
+      updateFloatingCart();
     });
   });
 
-  const checkoutBtn = document.getElementById('checkoutBtn');
-  if (checkoutBtn) {
-    checkoutBtn.addEventListener('click', openCheckoutModal);
-  }
+  updateFloatingCart();
 }
 
 // ----------------------------------------------------
-// 3. CHECKOUT MODAL WITH FAST GPS & FORWARD SEARCH
+// 3. CHECKOUT MODAL WITH PROMO COUPON & PAYMENT TABS
 // ----------------------------------------------------
 function openCheckoutModal() {
   document.body.classList.add('modal-open');
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
-  overlay.innerHTML = `
-    <div class="modal-card" style="max-width:480px; position:relative;">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
-        <h3 style="font-size:18px; margin:0;">Delivery & Contact Details</h3>
-        <button class="btn-secondary" id="closeModalBtn" style="padding:4px 8px; font-size:12px;">✕</button>
-      </div>
 
-      <div style="background:var(--primary-soft); padding:10px 12px; border-radius:var(--radius-sm); border:1px solid var(--primary-border); margin-bottom:14px;">
-        <div style="font-size:11px; font-weight:700; color:var(--primary); text-transform:uppercase; margin-bottom:6px; letter-spacing:0.04em;">
-          ✓ Auto-filled from your profile
-        </div>
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; align-items:end;">
-          <div style="display:flex; flex-direction:column; justify-content:flex-end;">
-            <label style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.03em; color:var(--ink-secondary); margin-bottom:4px; white-space:nowrap;">Full Name</label>
-            <input type="text" id="cName" value="${state.customerName}" placeholder="Your Full Name" style="width:100%; height:38px; box-sizing:border-box; padding:0 10px; font-size:13px; font-weight:600; border-radius:8px; border:1px solid var(--border); background:#fff;">
-          </div>
-          <div style="display:flex; flex-direction:column; justify-content:flex-end;">
-            <label style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.03em; color:var(--ink-secondary); margin-bottom:4px; white-space:nowrap;">Phone Number</label>
-            <input type="tel" id="cPhone" value="${state.customerPhone}" maxlength="10" placeholder="10-digit mobile" style="width:100%; height:38px; box-sizing:border-box; padding:0 10px; font-size:13px; font-weight:600; border-radius:8px; border:1px solid var(--border); background:#fff;">
-          </div>
-        </div>
-      </div>
+  function renderModalContent() {
+    const subtotal = cartSubtotal();
+    const fee = getDeliveryFee();
+    const discount = getDiscountAmount();
+    const total = getFinalPayable();
 
-      <!-- Delivery Address Selection -->
-      <div style="margin-bottom:14px; position:relative;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-          <label style="margin:0; font-size:13px;">Delivery Address</label>
-          
-          <!-- GPS Detect Button -->
-          <button type="button" id="detectGpsBtn" class="btn-secondary" style="font-size:11px; padding:4px 10px; color:var(--primary); border-color:var(--primary); font-weight:700;">
-            📍 Detect GPS Location
+    overlay.innerHTML = `
+      <div class="modal-card" style="max-width:500px; position:relative; max-height:90vh; overflow-y:auto;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+          <h3 style="font-size:18px; margin:0; font-weight:800;">Order & Delivery Checkout</h3>
+          <button class="btn-secondary" id="closeModalBtn" style="padding:4px 8px; font-size:12px; border:none; cursor:pointer;">
+            ${Icons.close(16)}
           </button>
         </div>
 
-        <!-- Saved Address Pills -->
-        ${state.savedAddresses.length ? `
-          <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
-            ${state.savedAddresses.map(a => `
-              <button type="button" class="addr-pill ${a.address === state.customerAddress ? 'active' : ''}" data-addr="${encodeURIComponent(a.address)}" data-lat="${a.lat || ''}" data-lng="${a.lng || ''}" style="background:#fff; border:1px solid var(--border); border-radius:999px; padding:4px 10px; font-size:11px; cursor:pointer; font-weight:600;">
-                ${a.label === 'Home' ? '🏠' : a.label.includes('Work') ? '🏢' : '📍'} ${a.label}
-              </button>
-            `).join('')}
+        <!-- Contact details -->
+        <div style="background:var(--primary-soft); padding:10px 12px; border-radius:var(--radius-sm); border:1px solid var(--primary-border); margin-bottom:14px;">
+          <div style="font-size:11px; font-weight:700; color:var(--primary); text-transform:uppercase; margin-bottom:6px; letter-spacing:0.04em; display:flex; align-items:center; gap:4px;">
+            ${Icons.check(12)} Auto-filled Contact Details
           </div>
-        ` : ''}
-
-        <div style="position:relative;">
-          <textarea id="cAddr" rows="2" placeholder="Start typing address or locality (e.g. Station Road, Anand)...">${state.customerAddress}</textarea>
-          <div id="geoSuggestBox" class="geo-suggest-box" style="display:none;"></div>
-        </div>
-
-        <div id="gpsStatusTag" style="font-size:11px; color:var(--green); font-weight:700; margin-top:4px; display:${state.destCoords ? 'block' : 'none'};">
-          ✓ Accurate Coordinates Attached (${state.destCoords ? `${state.destCoords.lat.toFixed(4)}, ${state.destCoords.lng.toFixed(4)}` : ''})
-        </div>
-      </div>
-
-      <div style="margin-bottom:14px;">
-        <label style="font-size:13px;">Payment Method</label>
-        <div class="pill-select" id="payMethodPick">
-          <button data-method="UPI" class="active">⚡ Instant UPI</button>
-          <button data-method="Card">💳 Card</button>
-          <button data-method="COD">💵 Cash on Delivery</button>
-        </div>
-      </div>
-
-      <div class="card" style="background:var(--surface-alt); padding:12px 14px; margin-bottom:16px;">
-        <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:3px;">
-          <span>Item Total</span><span>₹${cartTotal()}</span>
-        </div>
-        <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:6px;">
-          <span>Delivery Partner Fee</span><span>₹25</span>
-        </div>
-        <div style="display:flex; justify-content:space-between; font-weight:800; font-size:15px; border-top:1px dashed var(--border-strong); padding-top:6px;">
-          <span>To Pay</span><span style="color:var(--primary);">₹${cartTotal() + 25}</span>
-        </div>
-      </div>
-
-      <div style="display:flex; gap:10px;">
-        <button class="btn-secondary" id="cancelCheckout" style="flex:1;">Cancel</button>
-        <button class="btn-primary" id="confirmOrderBtn" style="flex:2;">1-Click Place Order →</button>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(overlay);
-
-  // Address pill click handler
-  overlay.querySelectorAll('.addr-pill').forEach(pill => {
-    pill.addEventListener('click', () => {
-      overlay.querySelectorAll('.addr-pill').forEach(p => p.classList.remove('active'));
-      pill.classList.add('active');
-      const addr = decodeURIComponent(pill.dataset.addr);
-      overlay.querySelector('#cAddr').value = addr;
-      state.customerAddress = addr;
-      const lat = pill.dataset.lat;
-      const lng = pill.dataset.lng;
-      if (lat && lng) {
-        state.destCoords = { lat: Number(lat), lng: Number(lng) };
-        const tag = overlay.querySelector('#gpsStatusTag');
-        tag.style.display = 'block';
-        tag.textContent = `✓ Coordinates Attached (${Number(lat).toFixed(4)}, ${Number(lng).toFixed(4)})`;
-      }
-    });
-  });
-
-  // Forward Geocode Autocomplete as user types
-  const addrInput = overlay.querySelector('#cAddr');
-  const suggestBox = overlay.querySelector('#geoSuggestBox');
-  let searchTimer = null;
-
-  addrInput.addEventListener('input', (e) => {
-    const val = e.target.value.trim();
-    clearTimeout(searchTimer);
-    if (val.length < 3) {
-      suggestBox.style.display = 'none';
-      return;
-    }
-    searchTimer = setTimeout(async () => {
-      try {
-        const res = await API.get(`/api/geo/search?q=${encodeURIComponent(val)}`);
-        if (res.results && res.results.length > 0) {
-          suggestBox.innerHTML = res.results.map(r => `
-            <div class="geo-suggest-item" data-lat="${r.lat}" data-lng="${r.lng}" data-name="${encodeURIComponent(r.display_name)}">
-              <strong>📍 ${r.short_name}</strong>
-              <div style="font-size:10px; color:var(--ink-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${r.display_name}</div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; align-items:end;">
+            <div>
+              <label style="font-size:11px; font-weight:700; text-transform:uppercase; color:var(--ink-secondary); margin-bottom:4px;">Full Name</label>
+              <input type="text" id="cName" value="${state.customerName}" placeholder="Your Full Name" style="width:100%; height:38px; box-sizing:border-box; padding:0 10px; font-size:13px; font-weight:600; border-radius:8px; border:1px solid var(--border); background:#fff;">
             </div>
-          `).join('');
-          suggestBox.style.display = 'block';
+            <div>
+              <label style="font-size:11px; font-weight:700; text-transform:uppercase; color:var(--ink-secondary); margin-bottom:4px;">Phone Number</label>
+              <input type="tel" id="cPhone" value="${state.customerPhone}" maxlength="10" placeholder="10-digit mobile" style="width:100%; height:38px; box-sizing:border-box; padding:0 10px; font-size:13px; font-weight:600; border-radius:8px; border:1px solid var(--border); background:#fff;">
+            </div>
+          </div>
+        </div>
 
-          suggestBox.querySelectorAll('.geo-suggest-item').forEach(item => {
-            item.addEventListener('click', () => {
-              const name = decodeURIComponent(item.dataset.name);
-              const lat = Number(item.dataset.lat);
-              const lng = Number(item.dataset.lng);
-              addrInput.value = name;
-              state.customerAddress = name;
-              state.destCoords = { lat, lng };
-              suggestBox.style.display = 'none';
+        <!-- Delivery Address -->
+        <div style="margin-bottom:14px; position:relative;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <label style="margin:0; font-size:13px;">Delivery Address</label>
+            <button type="button" id="detectGpsBtn" class="btn-secondary" style="font-size:11px; padding:4px 10px; color:var(--primary); border-color:var(--primary); font-weight:700; display:inline-flex; align-items:center; gap:4px;">
+              ${Icons.location(13)} Detect GPS
+            </button>
+          </div>
 
-              const tag = overlay.querySelector('#gpsStatusTag');
-              tag.style.display = 'block';
-              tag.textContent = `✓ Pin Placed at Address (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
-            });
-          });
-        } else {
-          suggestBox.style.display = 'none';
-        }
-      } catch (err) {
-        suggestBox.style.display = 'none';
-      }
-    }, 350);
-  });
+          ${state.savedAddresses.length ? `
+            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
+              ${state.savedAddresses.map(a => `
+                <button type="button" class="addr-pill ${a.address === state.customerAddress ? 'active' : ''}" data-addr="${encodeURIComponent(a.address)}" data-lat="${a.lat || ''}" data-lng="${a.lng || ''}" style="background:#fff; border:1px solid var(--border); border-radius:999px; padding:4px 10px; font-size:11px; cursor:pointer; font-weight:600; display:inline-flex; align-items:center; gap:4px;">
+                  ${Icons.location(12)} ${a.label}
+                </button>
+              `).join('')}
+            </div>
+          ` : ''}
 
-  // Fast GPS Detect Handler
-  const gpsBtn = overlay.querySelector('#detectGpsBtn');
-  gpsBtn.addEventListener('click', () => {
-    gpsBtn.textContent = '⏳ Locating...';
-    gpsBtn.disabled = true;
+          <div style="position:relative;">
+            <textarea id="cAddr" rows="2" placeholder="Start typing address or locality in Anand...">${state.customerAddress}</textarea>
+            <div id="geoSuggestBox" class="geo-suggest-box" style="display:none;"></div>
+          </div>
 
-    detectFastGps(
-      async (lat, lng) => {
-        state.destCoords = { lat, lng };
-        try {
-          const geoRes = await API.get(`/api/geo/reverse?lat=${lat}&lng=${lng}`);
-          overlay.querySelector('#cAddr').value = geoRes.address;
-          state.customerAddress = geoRes.address;
-          const tag = overlay.querySelector('#gpsStatusTag');
-          tag.style.display = 'block';
-          tag.textContent = `✓ GPS Location Attached (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
-          toast('Current location detected via GPS!', 'success');
-        } catch (e) {
-          const fallback = `Current Location (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
-          overlay.querySelector('#cAddr').value = fallback;
-          state.customerAddress = fallback;
-          const tag = overlay.querySelector('#gpsStatusTag');
-          tag.style.display = 'block';
-          tag.textContent = `✓ GPS Location Attached (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
-        } finally {
-          gpsBtn.textContent = '✓ GPS Found';
-          gpsBtn.disabled = false;
-        }
-      },
-      (err) => {
-        console.warn('GPS detection error:', err);
-        gpsBtn.textContent = '📍 Detect GPS';
-        gpsBtn.disabled = false;
+          <div id="gpsStatusTag" style="font-size:11px; color:var(--green); font-weight:700; margin-top:4px; display:${state.destCoords ? 'block' : 'none'};">
+            ✓ Accurate Coordinates Attached (${state.destCoords ? `${state.destCoords.lat.toFixed(4)}, ${state.destCoords.lng.toFixed(4)}` : ''})
+          </div>
+        </div>
 
-        if (err.code === 1) {
-          toast('📍 Location permission needed. Please allow location access or type your address.', 'error');
-        } else {
-          toast('GPS signal weak. You can type your address below and we will pin it on the map.', 'info');
-        }
-      }
-    );
-  });
+        <!-- Promo Code & Coupon Engine -->
+        <div style="margin-bottom:16px;">
+          <label style="font-size:13px; display:flex; align-items:center; gap:5px;">
+            ${Icons.discount(14)} Apply Promo Coupon
+          </label>
+          <div class="coupon-box" style="margin:6px 0 8px;">
+            <input type="text" id="couponCodeInput" class="coupon-input" placeholder="Enter code (e.g. WELCOME50)" value="${state.appliedCoupon ? state.appliedCoupon.code : ''}" ${state.appliedCoupon ? 'disabled' : ''}>
+            ${state.appliedCoupon ? `
+              <button type="button" id="removeCouponBtn" class="coupon-btn" style="background:var(--red);">Remove</button>
+            ` : `
+              <button type="button" id="applyCouponBtn" class="coupon-btn">Apply</button>
+            `}
+          </div>
 
-  let paymentMethod = 'UPI';
-  overlay.querySelectorAll('#payMethodPick button').forEach(b => {
-    b.addEventListener('click', () => {
-      overlay.querySelectorAll('#payMethodPick button').forEach(x => x.classList.remove('active'));
-      b.classList.add('active');
-      paymentMethod = b.dataset.method;
-    });
-  });
+          ${state.appliedCoupon ? `
+            <div class="applied-coupon-tag">
+              ${Icons.check(13)} Coupon ${state.appliedCoupon.code} applied! Saved ₹${state.appliedCoupon.discount}
+            </div>
+          ` : `
+            <div style="display:flex; gap:6px; flex-wrap:wrap;">
+              <button type="button" class="coupon-chip" data-code="WELCOME50">WELCOME50 (50% OFF)</button>
+              <button type="button" class="coupon-chip" data-code="FREEDEL">FREEDEL (Free Delivery)</button>
+              <button type="button" class="coupon-chip" data-code="FLAT20">FLAT20 (₹20 OFF)</button>
+            </div>
+          `}
+        </div>
 
-  const close = () => {
-    overlay.remove();
-    document.body.classList.remove('modal-open');
-  };
-  overlay.querySelector('#closeModalBtn').addEventListener('click', close);
-  overlay.querySelector('#cancelCheckout').addEventListener('click', close);
+        <!-- Payment Method Tabs -->
+        <div style="margin-bottom:16px;">
+          <label style="font-size:13px;">Payment Method</label>
+          <div class="payment-tabs" style="border-radius:var(--radius-sm); overflow:hidden; border:1px solid var(--border);">
+            <button type="button" class="payment-tab ${state.paymentMethod === 'UPI' ? 'active' : ''}" data-method="UPI">
+              ${Icons.qr(15)} Instant UPI / QR
+            </button>
+            <button type="button" class="payment-tab ${state.paymentMethod === 'Card' ? 'active' : ''}" data-method="Card">
+              ${Icons.card(15)} Card
+            </button>
+            <button type="button" class="payment-tab ${state.paymentMethod === 'COD' ? 'active' : ''}" data-method="COD">
+              ${Icons.receipt(15)} Cash on Delivery
+            </button>
+          </div>
 
-  // Submit Order with automatic address coordinate resolution
-  overlay.querySelector('#confirmOrderBtn').addEventListener('click', async () => {
-    const name = overlay.querySelector('#cName').value.trim();
-    const addr = overlay.querySelector('#cAddr').value.trim();
-    const phone = overlay.querySelector('#cPhone').value.trim();
+          <!-- Payment Tab Content -->
+          <div style="margin-top:10px; background:var(--surface-alt); padding:12px; border-radius:var(--radius-sm); border:1px solid var(--border);">
+            ${state.paymentMethod === 'UPI' ? `
+              <div style="text-align:center;">
+                <div style="background:#fff; border:1px solid var(--border); border-radius:var(--radius-sm); display:inline-flex; padding:12px; margin-bottom:8px;">
+                  ${Icons.qr(72, 'var(--ink)')}
+                </div>
+                <div style="font-size:12px; font-weight:700; color:var(--ink);">Scan via Google Pay / PhonePe / Paytm</div>
+                <div style="font-size:11px; color:var(--ink-secondary); margin-top:2px;">Instant authorization simulation on order placement.</div>
+              </div>
+            ` : state.paymentMethod === 'Card' ? `
+              <div>
+                <div style="margin-bottom:8px;">
+                  <label style="font-size:10px; margin-bottom:2px;">Card Number</label>
+                  <input type="text" placeholder="4111 2222 3333 4444" style="height:34px; padding:0 10px; font-size:12px;" value="4242 •••• •••• 4242">
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                  <div>
+                    <label style="font-size:10px; margin-bottom:2px;">Expiry</label>
+                    <input type="text" placeholder="MM/YY" style="height:34px; padding:0 10px; font-size:12px;" value="12/28">
+                  </div>
+                  <div>
+                    <label style="font-size:10px; margin-bottom:2px;">CVV</label>
+                    <input type="password" placeholder="•••" maxlength="3" style="height:34px; padding:0 10px; font-size:12px;" value="888">
+                  </div>
+                </div>
+              </div>
+            ` : `
+              <div style="font-size:12.5px; color:var(--ink-secondary); text-align:center; padding:6px 0;">
+                Pay exact amount <strong>₹${total}</strong> in cash or UPI QR at your doorstep upon arrival.
+              </div>
+            `}
+          </div>
+        </div>
 
-    if (!name || name.length < 2) {
-      toast('Please enter your full name', 'error');
-      return;
-    }
+        <!-- Bill Breakdown -->
+        <div class="card" style="background:var(--surface-alt); padding:12px 14px; margin-bottom:16px;">
+          <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:4px;">
+            <span>Item Subtotal</span><span>₹${subtotal}</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:4px;">
+            <span>Delivery Fee</span>
+            <span>${fee === 0 ? '<span style="color:var(--green); font-weight:700;">FREE</span>' : '₹' + fee}</span>
+          </div>
+          ${discount > 0 ? `
+            <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:4px; color:var(--green); font-weight:700;">
+              <span>Coupon Discount (${state.appliedCoupon.code})</span>
+              <span>− ₹${discount}</span>
+            </div>
+          ` : ''}
+          <div style="display:flex; justify-content:space-between; font-weight:800; font-size:15px; border-top:1px dashed var(--border-strong); padding-top:6px; margin-top:4px;">
+            <span>Total to Pay</span>
+            <span style="color:var(--primary);">₹${total}</span>
+          </div>
+        </div>
 
-    const cleanPhone = phone.replace(/[\s+-]/g, '').slice(-10);
-    if (!/^[6-9]\d{9}$/.test(cleanPhone)) {
-      toast('Please enter a valid 10-digit mobile number', 'error');
-      return;
-    }
+        <div style="display:flex; gap:10px;">
+          <button class="btn-secondary" id="cancelCheckout" style="flex:1;">Cancel</button>
+          <button class="btn-primary" id="confirmOrderBtn" style="flex:2; font-weight:800;">
+            1-Click Place Order →
+          </button>
+        </div>
+      </div>
+    `;
 
-    if (!addr || addr.length < 5) {
-      toast('Please provide a delivery address', 'error');
-      return;
-    }
+    bindModalEvents();
+  }
 
-    const confirmBtn = overlay.querySelector('#confirmOrderBtn');
-    confirmBtn.disabled = true;
-    confirmBtn.textContent = 'Placing Order...';
-
-    // If coordinates not set yet, attempt quick forward-geocode of typed address
-    if (!state.destCoords) {
-      try {
-        const geoSearch = await API.get(`/api/geo/search?q=${encodeURIComponent(addr)}`);
-        if (geoSearch.results && geoSearch.results.length > 0) {
-          state.destCoords = { lat: geoSearch.results[0].lat, lng: geoSearch.results[0].lng };
-        }
-      } catch (e) {}
-    }
-
-    const items = Object.entries(state.cart).map(([menu_item_id, qty]) => ({
-      menu_item_id: Number(menu_item_id),
-      qty
-    }));
-
-    try {
-      const order = await API.post('/api/orders', {
-        user_id: currentUser ? currentUser.id : 1,
-        customer_name: name,
-        customer_address: addr,
-        customer_phone: cleanPhone,
-        customer_email: state.customerEmail,
-        dest_lat: state.destCoords ? state.destCoords.lat : 22.5590,
-        dest_lng: state.destCoords ? state.destCoords.lng : 72.9570,
-        restaurant_id: state.activeRestaurant.id,
-        items,
-        payment_method: paymentMethod,
-      });
-
-      localStorage.setItem('fe_customer_name', name);
-      localStorage.setItem('fe_customer_address', addr);
-      localStorage.setItem('fe_customer_phone', cleanPhone);
-      localStorage.setItem('fe_last_order_id', order.id);
-
-      state.customerName = name;
-      state.customerAddress = addr;
-      state.customerPhone = cleanPhone;
-      state.trackingOrderId = order.id;
-      state.currentOrder = order;
-
+  function bindModalEvents() {
+    const close = () => {
       overlay.remove();
       document.body.classList.remove('modal-open');
-      updateOrderBadges();
-      switchScreen('tracking');
-      AudioFx.play('chime');
-      toast('Order placed successfully! Live delivery tracking below.', 'success');
-    } catch (err) {
-      confirmBtn.disabled = false;
-      confirmBtn.textContent = '1-Click Place Order →';
-      toast(err.message, 'error');
+    };
+    overlay.querySelector('#closeModalBtn').addEventListener('click', close);
+    overlay.querySelector('#cancelCheckout').addEventListener('click', close);
+
+    // Address pills
+    overlay.querySelectorAll('.addr-pill').forEach(pill => {
+      pill.addEventListener('click', () => {
+        overlay.querySelectorAll('.addr-pill').forEach(p => p.classList.remove('active'));
+        pill.classList.add('active');
+        const addr = decodeURIComponent(pill.dataset.addr);
+        overlay.querySelector('#cAddr').value = addr;
+        state.customerAddress = addr;
+        const lat = pill.dataset.lat;
+        const lng = pill.dataset.lng;
+        if (lat && lng) {
+          state.destCoords = { lat: Number(lat), lng: Number(lng) };
+          const tag = overlay.querySelector('#gpsStatusTag');
+          tag.style.display = 'block';
+          tag.textContent = `✓ Coordinates Attached (${Number(lat).toFixed(4)}, ${Number(lng).toFixed(4)})`;
+        }
+      });
+    });
+
+    // Forward Geocode Autocomplete
+    const addrInput = overlay.querySelector('#cAddr');
+    const suggestBox = overlay.querySelector('#geoSuggestBox');
+    let searchTimer = null;
+
+    addrInput.addEventListener('input', (e) => {
+      const val = e.target.value.trim();
+      clearTimeout(searchTimer);
+      if (val.length < 3) {
+        suggestBox.style.display = 'none';
+        return;
+      }
+      searchTimer = setTimeout(async () => {
+        try {
+          const res = await API.get(`/api/geo/search?q=${encodeURIComponent(val)}`);
+          if (res.results && res.results.length > 0) {
+            suggestBox.innerHTML = res.results.map(r => `
+              <div class="geo-suggest-item" data-lat="${r.lat}" data-lng="${r.lng}" data-name="${encodeURIComponent(r.display_name)}">
+                <strong>${r.short_name}</strong>
+                <div style="font-size:10px; color:var(--ink-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${r.display_name}</div>
+              </div>
+            `).join('');
+            suggestBox.style.display = 'block';
+
+            suggestBox.querySelectorAll('.geo-suggest-item').forEach(item => {
+              item.addEventListener('click', () => {
+                const name = decodeURIComponent(item.dataset.name);
+                const lat = Number(item.dataset.lat);
+                const lng = Number(item.dataset.lng);
+                addrInput.value = name;
+                state.customerAddress = name;
+                state.destCoords = { lat, lng };
+                suggestBox.style.display = 'none';
+
+                const tag = overlay.querySelector('#gpsStatusTag');
+                tag.style.display = 'block';
+                tag.textContent = `✓ Pin Placed at Address (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+              });
+            });
+          } else {
+            suggestBox.style.display = 'none';
+          }
+        } catch (err) {
+          suggestBox.style.display = 'none';
+        }
+      }, 350);
+    });
+
+    // Fast GPS Detect
+    const gpsBtn = overlay.querySelector('#detectGpsBtn');
+    gpsBtn.addEventListener('click', () => {
+      gpsBtn.textContent = 'Locating...';
+      gpsBtn.disabled = true;
+
+      detectFastGps(
+        async (lat, lng) => {
+          state.destCoords = { lat, lng };
+          try {
+            const geoRes = await API.get(`/api/geo/reverse?lat=${lat}&lng=${lng}`);
+            overlay.querySelector('#cAddr').value = geoRes.address;
+            state.customerAddress = geoRes.address;
+            const tag = overlay.querySelector('#gpsStatusTag');
+            tag.style.display = 'block';
+            tag.textContent = `✓ GPS Location Attached (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+            toast('Current location detected via GPS!', 'success');
+          } catch (e) {
+            const fallback = `Current Location (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+            overlay.querySelector('#cAddr').value = fallback;
+            state.customerAddress = fallback;
+            const tag = overlay.querySelector('#gpsStatusTag');
+            tag.style.display = 'block';
+            tag.textContent = `✓ GPS Location Attached (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+          } finally {
+            gpsBtn.textContent = '✓ GPS Found';
+            gpsBtn.disabled = false;
+          }
+        },
+        (err) => {
+          console.warn('GPS detection error:', err);
+          gpsBtn.textContent = 'Detect GPS';
+          gpsBtn.disabled = false;
+          toast('Could not detect GPS. You can type your address directly.', 'info');
+        }
+      );
+    });
+
+    // Payment tab clicks
+    overlay.querySelectorAll('.payment-tab').forEach(t => {
+      t.addEventListener('click', () => {
+        state.paymentMethod = t.dataset.method;
+        renderModalContent();
+      });
+    });
+
+    // Coupon chips
+    overlay.querySelectorAll('.coupon-chip').forEach(chip => {
+      chip.addEventListener('click', async () => {
+        const code = chip.dataset.code;
+        await applyCouponCode(code);
+      });
+    });
+
+    // Apply coupon button
+    const applyBtn = overlay.querySelector('#applyCouponBtn');
+    if (applyBtn) {
+      applyBtn.addEventListener('click', async () => {
+        const input = overlay.querySelector('#couponCodeInput');
+        const code = input.value.trim().toUpperCase();
+        if (!code) {
+          toast('Please enter a coupon code', 'error');
+          return;
+        }
+        await applyCouponCode(code);
+      });
     }
-  });
+
+    // Remove coupon button
+    const removeBtn = overlay.querySelector('#removeCouponBtn');
+    if (removeBtn) {
+      removeBtn.addEventListener('click', () => {
+        state.appliedCoupon = null;
+        toast('Coupon removed', 'info');
+        renderModalContent();
+      });
+    }
+
+    // Confirm order button
+    overlay.querySelector('#confirmOrderBtn').addEventListener('click', async () => {
+      const name = overlay.querySelector('#cName').value.trim();
+      const addr = overlay.querySelector('#cAddr').value.trim();
+      const phone = overlay.querySelector('#cPhone').value.trim();
+
+      if (!name || name.length < 2) {
+        toast('Please enter your full name', 'error');
+        return;
+      }
+
+      const cleanPhone = phone.replace(/[\s+-]/g, '').slice(-10);
+      if (!/^[6-9]\d{9}$/.test(cleanPhone)) {
+        toast('Please enter a valid 10-digit mobile number', 'error');
+        return;
+      }
+
+      if (!addr || addr.length < 5) {
+        toast('Please provide a delivery address', 'error');
+        return;
+      }
+
+      const confirmBtn = overlay.querySelector('#confirmOrderBtn');
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = 'Placing Order...';
+
+      if (!state.destCoords) {
+        try {
+          const geoSearch = await API.get(`/api/geo/search?q=${encodeURIComponent(addr)}`);
+          if (geoSearch.results && geoSearch.results.length > 0) {
+            state.destCoords = { lat: geoSearch.results[0].lat, lng: geoSearch.results[0].lng };
+          }
+        } catch (e) {}
+      }
+
+      const items = Object.entries(state.cart).map(([menu_item_id, qty]) => ({
+        menu_item_id: Number(menu_item_id),
+        qty
+      }));
+
+      try {
+        const order = await API.post('/api/orders', {
+          user_id: currentUser ? currentUser.id : 1,
+          customer_name: name,
+          customer_address: addr,
+          customer_phone: cleanPhone,
+          customer_email: state.customerEmail,
+          dest_lat: state.destCoords ? state.destCoords.lat : 22.5590,
+          dest_lng: state.destCoords ? state.destCoords.lng : 72.9570,
+          restaurant_id: state.activeRestaurant.id,
+          items,
+          payment_method: state.paymentMethod,
+          coupon_code: state.appliedCoupon ? state.appliedCoupon.code : null,
+          discount_amount: getDiscountAmount()
+        });
+
+        localStorage.setItem('fe_customer_name', name);
+        localStorage.setItem('fe_customer_address', addr);
+        localStorage.setItem('fe_customer_phone', cleanPhone);
+        localStorage.setItem('fe_last_order_id', order.id);
+
+        state.customerName = name;
+        state.customerAddress = addr;
+        state.customerPhone = cleanPhone;
+        state.trackingOrderId = order.id;
+        state.currentOrder = order;
+        state.cart = {};
+        state.appliedCoupon = null;
+
+        overlay.remove();
+        document.body.classList.remove('modal-open');
+        updateOrderBadges();
+        updateFloatingCart();
+        switchScreen('tracking');
+        AudioFx.play('chime');
+        toast('Order placed successfully! Live delivery tracking below.', 'success');
+      } catch (err) {
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = '1-Click Place Order →';
+        toast(err.message, 'error');
+      }
+    });
+  }
+
+  async function applyCouponCode(code) {
+    try {
+      const res = await API.post('/api/coupons/apply', {
+        code,
+        subtotal: cartSubtotal()
+      });
+      state.appliedCoupon = res;
+      toast(`Coupon ${res.code} applied! Saved ₹${res.discount}`, 'success');
+      renderModalContent();
+    } catch (e) {
+      toast(e.message || 'Invalid coupon code', 'error');
+    }
+  }
+
+  renderModalContent();
+  document.body.appendChild(overlay);
 }
 
 // ----------------------------------------------------
-// 4. MY ORDERS SCREEN (ACTIVE ORDERS + PAST ORDERS)
+// 4. MY ORDERS SCREEN (ACTIVE ORDERS + PAST ORDERS + RATINGS)
 // ----------------------------------------------------
 async function renderOrders() {
   view.innerHTML = `
-    <div class="card" style="text-align:center; padding:50px 20px;">
-      <div style="font-size:36px; margin-bottom:8px;">⏳</div>
-      <h3>Loading your orders...</h3>
+    <div class="skeleton-grid">
+      <div class="skeleton-card"><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-text"></div></div>
+      <div class="skeleton-card"><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-text"></div></div>
     </div>
   `;
 
@@ -839,13 +1020,13 @@ async function renderOrders() {
 
     view.innerHTML = `
       <div style="margin-bottom:20px;">
-        <h2 style="font-size:22px; margin-bottom:4px;">My Orders 📜</h2>
+        <h2 style="font-size:22px; font-weight:800; margin-bottom:4px;">My Orders</h2>
         <p style="color:var(--ink-secondary); font-size:14px; margin:0;">
           Track live active deliveries and re-order previous meals in 1 click.
         </p>
       </div>
 
-      <!-- ACTIVE ORDERS SECTION -->
+      <!-- ACTIVE ORDERS -->
       ${activeOrders.length > 0 ? `
         <div style="margin-bottom:28px;">
           <h3 style="font-size:16px; margin-bottom:12px; display:flex; align-items:center; gap:8px;">
@@ -856,35 +1037,40 @@ async function renderOrders() {
             <div class="order-history-card" style="border:2px solid var(--primary); background:linear-gradient(180deg, #FFF9F5, #FFFFFF);">
               <div class="order-history-header">
                 <div style="display:flex; gap:12px; align-items:center;">
-                  <div style="font-size:36px; width:52px; height:52px; background:#fff; border:1px solid var(--border); border-radius:var(--radius); display:flex; align-items:center; justify-content:center; box-shadow:var(--shadow-sm);">
-                    ${o.restaurant_emoji || '🍔'}
+                  <div style="width:48px; height:48px; background:#fff; border:1px solid var(--border); border-radius:var(--radius); display:flex; align-items:center; justify-content:center; color:var(--primary); box-shadow:var(--shadow-sm);">
+                    ${Icons.kitchen(24, 'var(--primary)')}
                   </div>
                   <div>
-                    <h4 style="font-size:17px; margin:0 0 2px;">${o.restaurant_name}</h4>
+                    <h4 style="font-size:16px; margin:0 0 2px;">${o.restaurant_name}</h4>
                     <div style="font-size:12px; color:var(--ink-secondary);">Order #${o.id} • Placed ${timeAgo(o.created_at)}</div>
                   </div>
                 </div>
                 <div style="text-align:right;">
-                  <span class="badge" style="background:var(--primary); color:#fff; font-size:11px; font-weight:800;">
-                    ${STATUS_ICONS[o.status] || '🚀'} ${STATUS_LABEL[o.status] || o.status}
+                  <span class="badge" style="background:var(--primary); color:#fff; font-size:11px; font-weight:800; display:inline-flex; align-items:center; gap:4px;">
+                    ${STATUS_LABEL[o.status] || o.status}
                   </span>
                   <div style="font-weight:800; font-size:15px; color:var(--ink); margin-top:4px;">₹${o.total}</div>
                 </div>
               </div>
 
-              <!-- Items chips -->
               <div style="margin-bottom:14px;">
                 ${o.items.map(it => `
-                  <span class="order-item-chip">${it.name} × ${it.qty}</span>
+                  <span class="order-item-chip" style="display:inline-flex; align-items:center; gap:4px;">
+                    ${Icons.veg(10)} ${it.name} × ${it.qty}
+                  </span>
                 `).join('')}
               </div>
 
               <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-                <div style="font-size:12px; color:var(--ink-secondary);">
-                  ${o.rider_name ? `🛵 Rider: <strong>${o.rider_name}</strong>` : '👨‍🍳 Kitchen preparing food'}
+                <div style="font-size:12px; color:var(--ink-secondary); display:flex; align-items:center; gap:6px;">
+                  ${o.rider_name ? `
+                    <span style="display:flex; align-items:center; gap:4px;">${Icons.rider(15)} Rider: <strong>${o.rider_name}</strong></span>
+                  ` : `
+                    <span style="display:flex; align-items:center; gap:4px;">${Icons.kitchen(15)} Kitchen preparing food</span>
+                  `}
                 </div>
-                <button class="btn-primary track-live-btn" data-id="${o.id}" style="padding:8px 16px; font-size:13px;">
-                  📍 Track Live on Map →
+                <button class="btn-primary track-live-btn" data-id="${o.id}" style="padding:8px 16px; font-size:13px; display:inline-flex; align-items:center; gap:6px;">
+                  ${Icons.location(14)} Track Live on Map →
                 </button>
               </div>
             </div>
@@ -892,12 +1078,12 @@ async function renderOrders() {
         </div>
       ` : ''}
 
-      <!-- PAST ORDERS SECTION -->
+      <!-- PAST ORDERS -->
       <div>
         <h3 style="font-size:16px; margin-bottom:12px;">Past Orders (${pastOrders.length})</h3>
         ${pastOrders.length === 0 ? `
           <div class="card" style="text-align:center; padding:40px 20px;">
-            <div style="font-size:40px; margin-bottom:8px;">🍽️</div>
+            <div style="margin-bottom:10px; color:var(--ink-muted);">${Icons.kitchen(40)}</div>
             <h4>No past orders yet</h4>
             <p style="color:var(--ink-secondary); font-size:13px; margin:4px 0 16px;">Explore local restaurants and order your favorite meal!</p>
             <button class="btn-primary" id="exploreNowBtn">Browse Restaurants →</button>
@@ -907,8 +1093,8 @@ async function renderOrders() {
             <div class="order-history-card">
               <div class="order-history-header">
                 <div style="display:flex; gap:12px; align-items:center;">
-                  <div style="font-size:32px; width:48px; height:48px; background:var(--surface-alt); border-radius:var(--radius-sm); display:flex; align-items:center; justify-content:center;">
-                    ${o.restaurant_emoji || '🍔'}
+                  <div style="width:44px; height:44px; background:var(--surface-alt); border-radius:var(--radius-sm); display:flex; align-items:center; justify-content:center; color:var(--ink-secondary);">
+                    ${Icons.kitchen(20)}
                   </div>
                   <div>
                     <h4 style="font-size:16px; margin:0 0 2px;">${o.restaurant_name}</h4>
@@ -925,16 +1111,34 @@ async function renderOrders() {
 
               <div style="margin-bottom:12px;">
                 ${o.items.map(it => `
-                  <span class="order-item-chip">${it.name} × ${it.qty} (₹${it.price * it.qty})</span>
+                  <span class="order-item-chip" style="display:inline-flex; align-items:center; gap:4px;">
+                    ${Icons.veg(10)} ${it.name} × ${it.qty} (₹${it.price * it.qty})
+                  </span>
                 `).join('')}
               </div>
 
+              <!-- Rating display or Rate button -->
+              ${o.status === 'DELIVERED' ? `
+                <div style="margin-bottom:12px; font-size:12px; display:flex; align-items:center; gap:6px;">
+                  ${o.rating ? `
+                    <span style="font-weight:700; color:var(--ink); display:inline-flex; align-items:center; gap:3px;">
+                      ${Icons.star(13)} ${o.rating}/5 Rated
+                    </span>
+                    ${o.review_text ? `<span style="color:var(--ink-muted); font-style:italic;">"${o.review_text}"</span>` : ''}
+                  ` : `
+                    <button class="btn-secondary rate-order-btn" data-id="${o.id}" style="padding:4px 10px; font-size:11px; display:inline-flex; align-items:center; gap:4px; color:#F59E0B; border-color:#F59E0B;">
+                      ${Icons.star(12)} Rate Meal
+                    </button>
+                  `}
+                </div>
+              ` : ''}
+
               <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid var(--border); padding-top:10px;">
-                <button class="btn-secondary view-receipt-btn" data-id="${o.id}" style="padding:5px 10px; font-size:12px;">
-                  📜 View Receipt
+                <button class="btn-secondary view-receipt-btn" data-id="${o.id}" style="padding:5px 10px; font-size:12px; display:inline-flex; align-items:center; gap:4px;">
+                  ${Icons.receipt(13)} View Receipt
                 </button>
                 <button class="btn-primary reorder-btn" data-id="${o.id}" style="padding:6px 14px; font-size:12px;">
-                  🔁 1-Click Reorder
+                  1-Click Reorder
                 </button>
               </div>
             </div>
@@ -966,21 +1170,97 @@ async function renderOrders() {
       });
     });
 
+    document.querySelectorAll('.rate-order-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const orderId = Number(btn.dataset.id);
+        openRatingModal(orderId);
+      });
+    });
+
     const exploreBtn = document.getElementById('exploreNowBtn');
     if (exploreBtn) exploreBtn.addEventListener('click', () => switchScreen('browse'));
 
   } catch (err) {
     console.error('Failed to load orders:', err);
     renderErrorScreen(view, {
-      title: "Couldn't Fetch Your Orders",
-      desc: "We had a momentary hiccup fetching your order history. Your previous orders are completely safe in our kitchen records!",
-      badge: "Orders Offline",
+      title: "Could Not Fetch Orders",
+      desc: "There was a momentary hiccup fetching your order history. Please try again.",
+      badge: "Network Error",
       error: err,
       onRetry: () => renderOrders(),
-      retryText: "Try Fetching Again",
+      retryText: "Retry",
       showSwitchRole: false
     });
   }
+}
+
+// ----------------------------------------------------
+// 5. INTERACTIVE ORDER RATING MODAL
+// ----------------------------------------------------
+function openRatingModal(orderId) {
+  document.body.classList.add('modal-open');
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+
+  let selectedRating = 5;
+
+  overlay.innerHTML = `
+    <div class="rating-modal-card">
+      <h3 style="font-size:18px; margin:0 0 6px;">Rate Your Experience</h3>
+      <p style="font-size:13px; color:var(--ink-secondary); margin:0 0 16px;">How was the food and delivery for Order #${orderId}?</p>
+
+      <div class="star-rating-row" id="starRatingRow">
+        ${[1, 2, 3, 4, 5].map(n => `
+          <button type="button" class="star-rating-btn ${n <= selectedRating ? 'active' : ''}" data-score="${n}">
+            ${Icons.star(28)}
+          </button>
+        `).join('')}
+      </div>
+
+      <div style="margin-bottom:16px;">
+        <textarea id="reviewTextInput" rows="2" placeholder="Write an optional review (e.g. food was fresh and delicious)..." style="font-size:13px;"></textarea>
+      </div>
+
+      <div style="display:flex; gap:10px;">
+        <button class="btn-secondary" id="cancelRatingBtn" style="flex:1;">Cancel</button>
+        <button class="btn-primary" id="submitRatingBtn" style="flex:2;">Submit Review</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  const starBtns = overlay.querySelectorAll('.star-rating-btn');
+  starBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      selectedRating = Number(btn.dataset.score);
+      starBtns.forEach(b => {
+        const score = Number(b.dataset.score);
+        b.classList.toggle('active', score <= selectedRating);
+      });
+    });
+  });
+
+  const close = () => {
+    overlay.remove();
+    document.body.classList.remove('modal-open');
+  };
+
+  overlay.querySelector('#cancelRatingBtn').addEventListener('click', close);
+  overlay.querySelector('#submitRatingBtn').addEventListener('click', async () => {
+    const review = overlay.querySelector('#reviewTextInput').value.trim();
+    try {
+      await API.post(`/api/orders/${orderId}/rate`, {
+        rating: selectedRating,
+        review
+      });
+      toast('Thank you for rating your order!', 'success');
+      close();
+      renderOrders();
+    } catch (e) {
+      toast(e.message || 'Could not submit rating', 'error');
+    }
+  });
 }
 
 // 1-Click Re-order Action
@@ -989,7 +1269,6 @@ async function reorderMeal(order) {
   const rest = state.restaurants.find(r => r.id === order.restaurant_id) || {
     id: order.restaurant_id,
     name: order.restaurant_name,
-    emoji: order.restaurant_emoji || '🍔',
     cuisine: order.restaurant_cuisine || 'Delicious Meals',
     rating: '4.8',
     delivery_time: '25-30 mins',
@@ -1003,13 +1282,13 @@ async function reorderMeal(order) {
     const menu = await API.get(`/api/restaurants/${order.restaurant_id}/menu`);
     state.menu = menu;
 
-    // Put items in cart
     order.items.forEach(it => {
       state.cart[it.menu_item_id] = it.qty;
     });
 
     state.screen = 'menu';
     renderMenu();
+    updateFloatingCart();
     openCheckoutModal();
     toast('Cart populated! Review and place your order.', 'success');
   } catch (e) {
@@ -1026,7 +1305,9 @@ function openReceiptModal(order) {
     <div class="modal-card" style="max-width:440px;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
         <h3 style="font-size:18px; margin:0;">Order #${order.id} Receipt</h3>
-        <button class="btn-secondary" id="closeReceiptBtn" style="padding:4px 8px; font-size:12px;">✕</button>
+        <button class="btn-secondary" id="closeReceiptBtn" style="padding:4px 8px; font-size:12px; border:none; cursor:pointer;">
+          ${Icons.close(16)}
+        </button>
       </div>
 
       <div style="font-size:13px; color:var(--ink-secondary); margin-bottom:12px;">
@@ -1038,13 +1319,18 @@ function openReceiptModal(order) {
       <div class="card" style="background:var(--surface-alt); padding:12px; margin-bottom:14px;">
         ${order.items.map(it => `
           <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:4px;">
-            <span>${it.name} × ${it.qty}</span>
+            <span style="display:inline-flex; align-items:center; gap:4px;">${Icons.veg(10)} ${it.name} × ${it.qty}</span>
             <span>₹${it.price * it.qty}</span>
           </div>
         `).join('')}
         <div style="display:flex; justify-content:space-between; font-size:13px; border-top:1px solid var(--border); padding-top:4px; margin-top:4px;">
           <span>Delivery Fee</span><span>₹${order.delivery_fee}</span>
         </div>
+        ${order.discount_amount ? `
+          <div style="display:flex; justify-content:space-between; font-size:13px; color:var(--green); font-weight:700;">
+            <span>Discount (${order.coupon_code || 'PROMO'})</span><span>− ₹${order.discount_amount}</span>
+          </div>
+        ` : ''}
         <div style="display:flex; justify-content:space-between; font-weight:800; font-size:15px; border-top:1px dashed var(--border-strong); padding-top:6px; margin-top:4px;">
           <span>Total Paid</span><span style="color:var(--primary);">₹${order.total}</span>
         </div>
@@ -1075,12 +1361,12 @@ function openReceiptModal(order) {
 }
 
 // ----------------------------------------------------
-// 5. SAVED ADDRESSES SCREEN
+// 6. SAVED ADDRESSES SCREEN
 // ----------------------------------------------------
 function renderAddresses() {
   view.innerHTML = `
     <div style="margin-bottom:20px;">
-      <h2 style="font-size:22px; margin-bottom:4px;">Saved Addresses 📍</h2>
+      <h2 style="font-size:22px; font-weight:800; margin-bottom:4px;">Saved Addresses</h2>
       <p style="color:var(--ink-secondary); font-size:14px; margin:0;">
         Manage your delivery locations for 1-click checkout.
       </p>
@@ -1090,8 +1376,8 @@ function renderAddresses() {
       ${state.savedAddresses.map(a => `
         <div class="card" style="position:relative;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-            <div style="font-weight:700; font-size:14px;">
-              ${a.label === 'Home' ? '🏠' : a.label.includes('Work') ? '🏢' : '📍'} ${a.label}
+            <div style="font-weight:700; font-size:14px; display:inline-flex; align-items:center; gap:6px;">
+              ${Icons.location(15)} ${a.label}
             </div>
             ${a.is_default ? `<span class="badge" style="background:var(--primary-soft); color:var(--primary);">Default</span>` : ''}
           </div>
@@ -1112,11 +1398,11 @@ function renderAddresses() {
       <div style="margin-bottom:10px; position:relative;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
           <label style="font-size:12px; margin:0;">Complete Address</label>
-          <button type="button" id="newAddrGpsBtn" class="btn-secondary" style="font-size:11px; padding:3px 8px; color:var(--primary); border-color:var(--primary);">
-            📍 Detect GPS
+          <button type="button" id="newAddrGpsBtn" class="btn-secondary" style="font-size:11px; padding:3px 8px; color:var(--primary); border-color:var(--primary); display:inline-flex; align-items:center; gap:4px;">
+            ${Icons.location(12)} Detect GPS
           </button>
         </div>
-        <textarea id="newAddrText" rows="2" placeholder="House, Road, Area, Landmark"></textarea>
+        <textarea id="newAddrText" rows="2" placeholder="House, Road, Area, Landmark in Anand"></textarea>
       </div>
       <button class="btn-primary" id="saveNewAddrBtn" style="width:100%;">Save Address</button>
     </div>
@@ -1125,7 +1411,7 @@ function renderAddresses() {
   let newCoords = null;
   const newGpsBtn = document.getElementById('newAddrGpsBtn');
   newGpsBtn.addEventListener('click', () => {
-    newGpsBtn.textContent = '⏳ Locating...';
+    newGpsBtn.textContent = 'Locating...';
     detectFastGps(
       async (lat, lng) => {
         newCoords = { lat, lng };
@@ -1140,7 +1426,7 @@ function renderAddresses() {
         }
       },
       (err) => {
-        newGpsBtn.textContent = '📍 Detect GPS';
+        newGpsBtn.textContent = 'Detect GPS';
         toast('Could not detect GPS: ' + err.message, 'info');
       }
     );
@@ -1170,12 +1456,12 @@ function renderAddresses() {
 }
 
 // ----------------------------------------------------
-// 6. PROFILE & ACCOUNT SCREEN
+// 7. PROFILE & ACCOUNT SCREEN
 // ----------------------------------------------------
 function renderProfile() {
   view.innerHTML = `
     <div style="margin-bottom:20px;">
-      <h2 style="font-size:22px; margin-bottom:4px;">My Account 👤</h2>
+      <h2 style="font-size:22px; font-weight:800; margin-bottom:4px;">My Account</h2>
       <p style="color:var(--ink-secondary); font-size:14px; margin:0;">
         Profile preferences and role settings.
       </p>
@@ -1183,25 +1469,28 @@ function renderProfile() {
 
     <div class="card" style="max-width:540px; margin-bottom:20px;">
       <div style="display:flex; align-items:center; gap:14px; margin-bottom:18px;">
-        <div style="font-size:36px; width:64px; height:64px; background:var(--primary-soft); border-radius:50%; display:flex; align-items:center; justify-content:center;">
-          👤
+        <div style="width:64px; height:64px; background:var(--primary-soft); border-radius:50%; display:flex; align-items:center; justify-content:center; color:var(--primary);">
+          ${Icons.customer(32, 'var(--primary)')}
         </div>
         <div>
           <h3 style="font-size:18px; margin:0 0 3px;">${currentUser ? currentUser.name : state.customerName}</h3>
           <div style="color:var(--ink-secondary); font-size:13px;">${currentUser ? currentUser.email : state.customerEmail}</div>
-          <div style="color:var(--primary); font-size:13px; font-weight:700;">📞 +91 ${currentUser ? currentUser.phone : state.customerPhone}</div>
+          <div style="color:var(--primary); font-size:13px; font-weight:700; margin-top:2px;">+91 ${currentUser ? currentUser.phone : state.customerPhone}</div>
         </div>
       </div>
 
       <div style="border-top:1px solid var(--border); padding-top:14px; display:flex; flex-direction:column; gap:10px;">
-        <button class="btn-secondary" onclick="switchScreen('orders')" style="justify-content:space-between; padding:12px;">
-          <span>📜 View Past Orders</span><span>→</span>
+        <button class="btn-secondary" onclick="switchScreen('orders')" style="justify-content:space-between; padding:12px; display:flex; align-items:center;">
+          <span style="display:flex; align-items:center; gap:8px;">${Icons.receipt(16)} View Past Orders</span>
+          <span>→</span>
         </button>
-        <button class="btn-secondary" onclick="switchScreen('addresses')" style="justify-content:space-between; padding:12px;">
-          <span>📍 Saved Addresses (${state.savedAddresses.length})</span><span>→</span>
+        <button class="btn-secondary" onclick="switchScreen('addresses')" style="justify-content:space-between; padding:12px; display:flex; align-items:center;">
+          <span style="display:flex; align-items:center; gap:8px;">${Icons.location(16)} Saved Addresses (${state.savedAddresses.length})</span>
+          <span>→</span>
         </button>
-        <a class="btn-secondary" href="index.html" style="justify-content:space-between; padding:12px;">
-          <span>⇄ Switch Role (Kitchen / Rider / Admin)</span><span>→</span>
+        <a class="btn-secondary" href="index.html" style="justify-content:space-between; padding:12px; display:flex; align-items:center;">
+          <span style="display:flex; align-items:center; gap:8px;">⇄ Switch Role (Kitchen / Rider / Admin)</span>
+          <span>→</span>
         </a>
       </div>
     </div>
@@ -1212,8 +1501,8 @@ function renderProfile() {
           Sign Out of Account
         </button>
       ` : `
-        <a class="btn-primary" href="login.html" style="width:100%; padding:12px; font-weight:800; text-align:center;">
-          🔐 Sign In / Create Account
+        <a class="btn-primary" href="login.html" style="width:100%; padding:12px; font-weight:800; text-align:center; display:block;">
+          Sign In / Create Account
         </a>
       `}
     </div>
@@ -1232,12 +1521,12 @@ function renderProfile() {
 }
 
 // ----------------------------------------------------
-// 7. TRACKING SCREEN
+// 8. LIVE ORDER TRACKING SCREEN & OSRM ROAD MAP
 // ----------------------------------------------------
 async function loadTracking() {
   view.innerHTML = `
     <div class="card" style="text-align:center; padding:60px 20px;">
-      <div style="font-size:40px; margin-bottom:12px;">⏳</div>
+      <div style="margin-bottom:12px; color:var(--primary);">${Icons.clock(36, 'var(--primary)')}</div>
       <h3>Connecting to Live Order Tracker...</h3>
     </div>
   `;
@@ -1248,7 +1537,7 @@ async function loadTracking() {
   } catch (err) {
     view.innerHTML = `
       <div class="card" style="text-align:center; padding:60px 20px;">
-        <div style="font-size:40px; margin-bottom:12px;">🍽️</div>
+        <div style="margin-bottom:12px; color:var(--ink-muted);">${Icons.kitchen(36)}</div>
         <h3>No active order found</h3>
         <p style="color:var(--ink-secondary); font-size:14px; margin:8px 0 16px;">Browse restaurants to place your next meal.</p>
         <button class="btn-primary" id="startOrder">Browse Menu →</button>
@@ -1285,56 +1574,59 @@ function renderTracking(order) {
 
   view.innerHTML = `
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:8px;">
-      <a href="#" class="back-link" id="orderMoreLink" style="margin:0;">← Browse Menu</a>
-      <span class="badge ${isDelivered ? 'delivered' : isCancelled ? 'cancelled' : 'preparing'}" style="font-size:12px; padding:6px 12px;">
-        ${STATUS_ICONS[order.status] || ''} ${STATUS_LABEL[order.status] || order.status}
+      <a href="#" class="back-link" id="orderMoreLink" style="margin:0; display:inline-flex; align-items:center; gap:4px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        Browse Menu
+      </a>
+      <span class="badge ${isDelivered ? 'delivered' : isCancelled ? 'cancelled' : 'preparing'}" style="font-size:12px; padding:6px 12px; display:inline-flex; align-items:center; gap:5px;">
+        ${STATUS_LABEL[order.status] || order.status}
       </span>
     </div>
 
     <!-- Live Map Container -->
     <div class="card map-container" style="margin-bottom:18px; padding:0; overflow:hidden; border:2px solid var(--border);">
-      <div id="trackingMap" style="width:100%; height:260px; background:var(--surface-alt);"></div>
+      <div id="trackingMap" style="width:100%; height:270px; background:var(--surface-alt);"></div>
     </div>
 
     <!-- Active Delivery Status Card -->
     <div class="card" style="margin-bottom:18px;">
       <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:14px;">
         <div>
-          <h2 style="font-size:20px; margin-bottom:2px;">Order #${order.id}</h2>
+          <h2 style="font-size:20px; margin-bottom:2px; font-weight:800;">Order #${order.id}</h2>
           <div style="color:var(--ink-secondary); font-size:13px;">From <strong>${order.restaurant_name}</strong></div>
         </div>
         ${(order.delivery_pin || order.delivery_otp) ? `
           <div style="text-align:right; flex-shrink:0;">
             <div style="font-size:10px; font-weight:800; color:var(--primary); text-transform:uppercase; letter-spacing:0.5px;">Delivery PIN</div>
-            <div class="pin-badge">${order.delivery_pin || order.delivery_otp}</div>
-            <div style="font-size:10px; color:var(--ink-muted); margin-top:2px;">Share with rider at delivery</div>
+            <div class="pin-badge" style="font-family:monospace; font-size:16px; font-weight:800; letter-spacing:2px; background:var(--primary-soft); color:var(--primary); padding:4px 10px; border-radius:6px; border:1px solid var(--primary-border);">${order.delivery_pin || order.delivery_otp}</div>
+            <div style="font-size:10px; color:var(--ink-muted); margin-top:2px;">Share with rider at doorstep</div>
           </div>
         ` : ''}
       </div>
 
-      <!-- Industry-Standard 5-Stage Stepper -->
+      <!-- 5-Stage Stepper -->
       <div class="delivery-stepper">
         <div class="stepper-track-bg"></div>
         <div class="stepper-track-fill" style="width: ${progressWidth};"></div>
         <div class="stepper-nodes">
           <div class="stepper-node ${isStep1Done ? 'completed' : isStep1Active ? 'active' : ''}">
-            <div class="stepper-icon">${isStep1Done ? '✓' : '📋'}</div>
+            <div class="stepper-icon">${isStep1Done ? Icons.check(14) : '1'}</div>
             <div class="stepper-title">Placed</div>
           </div>
           <div class="stepper-node ${isStep2Done ? 'completed' : isStep2Active ? 'active' : ''}">
-            <div class="stepper-icon">${isStep2Done ? '✓' : '👨‍🍳'}</div>
+            <div class="stepper-icon">${isStep2Done ? Icons.check(14) : Icons.kitchen(14)}</div>
             <div class="stepper-title">Cooking</div>
           </div>
           <div class="stepper-node ${isStep3Done ? 'completed' : isStep3Active ? 'active' : ''}">
-            <div class="stepper-icon">${isStep3Done ? '✓' : '📦'}</div>
+            <div class="stepper-icon">${isStep3Done ? Icons.check(14) : Icons.package(14)}</div>
             <div class="stepper-title">Ready</div>
           </div>
           <div class="stepper-node ${isStep4Done ? 'completed' : isStep4Active ? 'active' : ''}">
-            <div class="stepper-icon">${isStep4Done ? '✓' : '🛵'}</div>
+            <div class="stepper-icon">${isStep4Done ? Icons.check(14) : Icons.rider(14)}</div>
             <div class="stepper-title">On Way</div>
           </div>
           <div class="stepper-node ${isStep5Done ? 'completed' : ''}">
-            <div class="stepper-icon">${isStep5Done ? '🎉' : '🏠'}</div>
+            <div class="stepper-icon">${isStep5Done ? Icons.check(14) : Icons.star(14)}</div>
             <div class="stepper-title">Delivered</div>
           </div>
         </div>
@@ -1343,7 +1635,9 @@ function renderTracking(order) {
       <!-- Rider Info or Kitchen Prep Note -->
       ${order.rider_name ? `
         <div style="display:flex; align-items:center; gap:12px; background:var(--surface-alt); padding:12px; border-radius:var(--radius-sm); border:1px solid var(--border);">
-          <div style="font-size:32px;">🛵</div>
+          <div style="width:44px; height:44px; border-radius:50%; background:var(--blue-soft); color:var(--blue); display:flex; align-items:center; justify-content:center;">
+            ${Icons.rider(22, 'var(--blue)')}
+          </div>
           <div style="flex:1;">
             <div style="font-weight:700; font-size:14px;">${order.rider_name} is delivering your food</div>
             <div style="font-size:12px; color:var(--ink-secondary);">${order.rider_vehicle || 'Motorcycle'} • 📞 ${order.rider_phone || '9876543210'}</div>
@@ -1351,8 +1645,11 @@ function renderTracking(order) {
           <a href="tel:${order.rider_phone || ''}" class="btn-secondary" style="padding:6px 12px; font-size:12px; color:var(--primary); border-color:var(--primary); font-weight:700;">Call</a>
         </div>
       ` : `
-        <div style="background:var(--primary-soft); padding:12px; border-radius:var(--radius-sm); border:1px solid var(--primary-border); font-size:13px; color:var(--ink);">
-          👨‍🍳 <strong>Kitchen is preparing your order.</strong> A delivery partner will be automatically dispatched as soon as the food is boxed!
+        <div style="background:var(--primary-soft); padding:12px; border-radius:var(--radius-sm); border:1px solid var(--primary-border); font-size:13px; color:var(--ink); display:flex; align-items:center; gap:10px;">
+          <span style="color:var(--primary);">${Icons.kitchen(20, 'var(--primary)')}</span>
+          <div>
+            <strong>Kitchen is preparing your order.</strong> A delivery partner will be automatically dispatched once items are boxed.
+          </div>
         </div>
       `}
     </div>
@@ -1362,14 +1659,19 @@ function renderTracking(order) {
       <h3 style="font-size:15px; margin-bottom:12px;">Order Summary</h3>
       ${order.items.map(it => `
         <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:6px;">
-          <span>${it.name} × ${it.qty}</span>
+          <span style="display:inline-flex; align-items:center; gap:5px;">${Icons.veg(11)} ${it.name} × ${it.qty}</span>
           <span style="font-weight:600;">₹${it.price * it.qty}</span>
         </div>
       `).join('')}
       <div style="border-top:1px solid var(--border); padding-top:8px; margin-top:8px; font-size:13px;">
         <div style="display:flex; justify-content:space-between; color:var(--ink-secondary); margin-bottom:4px;">
-          <span>Delivery Fee</span><span>₹${order.delivery_fee}</span>
+          <span>Delivery Fee</span><span>${order.delivery_fee === 0 ? '<span style="color:var(--green); font-weight:700;">FREE</span>' : '₹' + order.delivery_fee}</span>
         </div>
+        ${order.discount_amount ? `
+          <div style="display:flex; justify-content:space-between; color:var(--green); font-weight:700; margin-bottom:4px;">
+            <span>Discount (${order.coupon_code || 'PROMO'})</span><span>− ₹${order.discount_amount}</span>
+          </div>
+        ` : ''}
         <div style="display:flex; justify-content:space-between; font-weight:800; font-size:16px; border-top:1px dashed var(--border); margin-top:8px; padding-top:8px;">
           <span>Total Paid (${order.payment_method})</span>
           <span style="color:var(--primary);">₹${order.total}</span>
@@ -1377,10 +1679,10 @@ function renderTracking(order) {
       </div>
     </div>
 
-    <!-- Live Event Timeline -->
+    <!-- Timeline Audit -->
     <div class="card">
       <h3 style="font-size:15px; margin-bottom:14px;">Audit & Tracking Timeline</h3>
-      ${order.log.map(l => `
+      ${(order.log || []).map(l => `
         <div style="display:flex; justify-content:space-between; align-items:flex-start; padding:8px 0; border-bottom:1px solid var(--border);">
           <div>
             <div style="font-weight:700; font-size:13px;">${STATUS_LABEL[l.status] || l.status}</div>
@@ -1400,65 +1702,99 @@ function renderTracking(order) {
   initTrackingMap(order);
 }
 
-function initTrackingMap(order) {
+// ----------------------------------------------------
+// 9. LEAFLET MAP WITH REAL-ROAD OSRM ROUTING
+// ----------------------------------------------------
+async function initTrackingMap(order) {
   const mapEl = document.getElementById('trackingMap');
   if (!mapEl || typeof L === 'undefined') return;
 
-  const restLat = order.restaurant_lat || 22.5532;
-  const restLng = order.restaurant_lng || 72.9485;
-  const destLat = order.dest_lat || 22.5590;
-  const destLng = order.dest_lng || 72.9570;
-
-  let riderProgress = 0;
-  if (order.status === 'PICKED_UP') riderProgress = 0.25;
-  else if (order.status === 'OUT_FOR_DELIVERY') riderProgress = 0.70;
-  else if (order.status === 'DELIVERED') riderProgress = 1.0;
-
-  const riderLat = restLat + (destLat - restLat) * riderProgress;
-  const riderLng = restLng + (destLng - restLng) * riderProgress;
+  const restLat = Number(order.restaurant_lat) || 22.5532;
+  const restLng = Number(order.restaurant_lng) || 72.9485;
+  const destLat = Number(order.dest_lat) || 22.5590;
+  const destLng = Number(order.dest_lng) || 72.9570;
 
   if (state.mapInstance) {
     try { state.mapInstance.remove(); } catch (e) {}
   }
 
-  state.mapInstance = L.map('trackingMap', { zoomControl: false }).setView([riderLat, riderLng], 14);
+  state.mapInstance = L.map('trackingMap', { zoomControl: false }).setView([restLat, restLng], 14);
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 18,
     attribution: '© OpenStreetMap'
   }).addTo(state.mapInstance);
 
+  // Restaurant Marker
   const restIcon = L.divIcon({
-    className: 'custom-map-pin',
-    html: `<div style="font-size:24px; filter:drop-shadow(0 2px 4px rgba(0,0,0,0.3));">🏪</div>`,
-    iconSize: [30, 30],
-    iconAnchor: [15, 15]
+    className: 'custom-map-pin restaurant',
+    html: Icons.kitchen(16, '#FFF'),
+    iconSize: [32, 32],
+    iconAnchor: [16, 16]
   });
-  L.marker([restLat, restLng], { icon: restIcon }).addTo(state.mapInstance).bindPopup(order.restaurant_name);
+  L.marker([restLat, restLng], { icon: restIcon }).addTo(state.mapInstance).bindPopup(`<strong>${order.restaurant_name}</strong>`);
 
-  const homeIcon = L.divIcon({
-    className: 'custom-map-pin',
-    html: `<div style="font-size:24px; filter:drop-shadow(0 2px 4px rgba(0,0,0,0.3));">🏠</div>`,
-    iconSize: [30, 30],
-    iconAnchor: [15, 15]
+  // Customer Destination Marker
+  const destIcon = L.divIcon({
+    className: 'custom-map-pin destination',
+    html: Icons.location(16, '#FFF'),
+    iconSize: [32, 32],
+    iconAnchor: [16, 16]
   });
-  L.marker([destLat, destLng], { icon: homeIcon }).addTo(state.mapInstance).bindPopup("Delivery Address");
+  L.marker([destLat, destLng], { icon: destIcon }).addTo(state.mapInstance).bindPopup("Delivery Address");
 
-  L.polyline([[restLat, restLng], [destLat, destLng]], {
+  // Determine rider progress ratio
+  let progressRatio = 0;
+  if (['ASSIGNED', 'READY'].includes(order.status)) progressRatio = 0.05;
+  else if (order.status === 'PICKED_UP') progressRatio = 0.35;
+  else if (order.status === 'OUT_FOR_DELIVERY') progressRatio = 0.75;
+  else if (order.status === 'DELIVERED') progressRatio = 1.0;
+
+  // Real-road route fetching via OSRM with graceful fallback
+  let routeCoords = [[restLat, restLng], [destLat, destLng]];
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2800);
+    const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${restLng},${restLat};${destLng},${destLat}?overview=full&geometries=geojson`;
+    const res = await fetch(osrmUrl, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.routes && data.routes[0] && data.routes[0].geometry && data.routes[0].geometry.coordinates) {
+        // GeoJSON coords are [lng, lat], convert to Leaflet [lat, lng]
+        routeCoords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+      }
+    }
+  } catch (e) {
+    // Offline or slow network: fallback to straight line
+  }
+
+  // Draw smooth polyline
+  state.routePolyline = L.polyline(routeCoords, {
     color: '#FF5200',
-    weight: 3,
-    dashArray: '6, 8'
+    weight: 4,
+    opacity: 0.85,
+    lineJoin: 'round'
   }).addTo(state.mapInstance);
 
+  // Position rider along the route
+  const targetIndex = Math.min(routeCoords.length - 1, Math.floor(routeCoords.length * progressRatio));
+  const riderPos = routeCoords[targetIndex] || [restLat, restLng];
+
   if (['ASSIGNED', 'PICKED_UP', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(order.status)) {
-    const bikeIcon = L.divIcon({
-      className: 'custom-bike-pin',
-      html: `<div style="font-size:28px; filter:drop-shadow(0 3px 6px rgba(0,0,0,0.4)); animation:pulseBar 1.2s infinite;">🛵</div>`,
-      iconSize: [32, 32],
-      iconAnchor: [16, 16]
+    const riderIcon = L.divIcon({
+      className: 'custom-map-pin rider',
+      html: Icons.rider(18, '#FFF'),
+      iconSize: [34, 34],
+      iconAnchor: [17, 17]
     });
-    state.riderMarker = L.marker([riderLat, riderLng], { icon: bikeIcon }).addTo(state.mapInstance);
+    state.riderMarker = L.marker(riderPos, { icon: riderIcon }).addTo(state.mapInstance);
   }
+
+  // Fit bounds to show both restaurant and customer comfortably
+  const bounds = L.latLngBounds(routeCoords);
+  state.mapInstance.fitBounds(bounds, { padding: [35, 35] });
 }
 
 function celebrateDelivery() {

@@ -10,32 +10,40 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="FoodieExpress">
 <link rel="apple-touch-icon" href="icons/icon.svg">
+<link rel="icon" type="image/svg+xml" href="icons/icon.svg">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 <div class="app-shell">
   <div class="masthead">
     <div class="brand">
-      <div class="brand-icon">🍔</div>
+      <div class="brand-icon">
+        <img src="icons/icon.svg" alt="Foodie Express Logo">
+      </div>
       <div>FOODIE <span>EXPRESS</span></div>
     </div>
     <div class="header-actions" id="indexHeaderActions">
-      <button id="phoneModalBtn" class="btn-secondary hide-mobile" style="padding:7px 14px; font-size:13px; color:var(--primary); border-color:var(--primary);">
-        📱 Open on Phone
+      <button id="phoneModalBtn" class="btn-secondary hide-mobile" style="padding:7px 14px; font-size:13px; color:var(--primary); border-color:var(--primary); display:inline-flex; align-items:center; gap:6px;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+        Mobile Access
       </button>
-      <button id="pwaInstallBtn" class="btn-secondary hide-mobile" onclick="PWA.install()" style="display:none; padding:7px 14px; font-size:13px; color:var(--primary); border-color:var(--primary);">
-        📱 Install App
+      <button id="pwaInstallBtn" class="btn-secondary hide-mobile" onclick="PWA.install()" style="display:none; padding:7px 14px; font-size:13px; color:var(--primary); border-color:var(--primary); align-items:center; gap:6px;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Install App
       </button>
-      <a class="btn-primary" href="login.html" style="padding:6px 14px; font-size:12px; white-space:nowrap; border-radius:8px;">🔐 Sign In</a>
-      <div class="role-tag hide-mobile">Production Logistics System</div>
+      <a class="btn-primary" href="login.html" style="padding:7px 16px; font-size:12px; white-space:nowrap; border-radius:8px; display:inline-flex; align-items:center; gap:6px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        Sign In
+      </a>
+      <div class="role-tag hide-mobile">Logistics Platform</div>
     </div>
   </div>
 
   <div style="margin-bottom:28px;">
-    <h1 style="font-size:26px; margin-bottom:8px;">Real-Time Food & Grocery Delivery Network</h1>
+    <h1 style="font-size:26px; margin-bottom:8px;">Real-Time Food & Delivery Network</h1>
     <p style="color:var(--ink-secondary); max-width:640px; font-size:15px; margin:0;">
-      A comprehensive on-demand delivery platform featuring user role authentication, saved address books,
-      instant GPS current location detection, Kitchen Display KDS Kanban, and 4-digit Delivery PIN security.
+      A comprehensive on-demand delivery ecosystem featuring role-based authentication, address management,
+      instant GPS route tracking, Kitchen Display Kanban boards, and 4-digit Delivery PIN verification.
     </p>
   </div>
 
@@ -43,46 +51,57 @@
     <!-- Featured 4-in-1 God Mode Simulator -->
     <a class="role-card featured" href="showcase.html">
       <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-        <div class="glyph">⚡</div>
-        <span class="badge" style="background:var(--primary); color:#fff;">Evaluator / Demo Mode</span>
+        <div class="glyph">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        </div>
+        <span class="badge" style="background:var(--primary); color:#fff; font-weight:700;">Live Simulator</span>
       </div>
       <h3>4-in-1 Live Showcase & Simulation</h3>
       <p>
-        View all 4 roles (Customer, Kitchen KDS, Rider, Admin) synchronized side-by-side on one screen. Includes a 
-        <strong>"1-Click Auto Simulation"</strong> button to watch an entire order lifecycle execute end-to-end!
+        View all 4 roles (Customer, Kitchen KDS, Rider, Admin) synchronized side-by-side on one screen. Includes an 
+        automated 1-click simulation stepping through the entire order lifecycle in real time.
       </p>
     </a>
 
     <!-- Customer -->
     <a class="role-card" href="customer.html">
-      <div class="glyph">🧑‍🍳</div>
+      <div class="glyph">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      </div>
       <h3>Customer Portal</h3>
-      <p>1-Click checkout with saved address book, fast GPS location detection, 100% pure veg menus, and live route tracking.</p>
+      <p>Seamless checkout with saved address management, instant GPS location detection, fresh curated menus, and live route tracking.</p>
     </a>
 
     <!-- Vendor / Kitchen -->
     <a class="role-card" href="vendor.html">
-      <div class="glyph">🏪</div>
+      <div class="glyph">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      </div>
       <h3>Restaurant Kitchen (KDS)</h3>
-      <p>3-column Kanban board for incoming, cooking, and ready orders with audio chimes, live SLA delay timers, and menu stock controls.</p>
+      <p>3-column Kanban board for incoming, cooking, and ready orders with audio alerts, live SLA delay timers, and item stock controls.</p>
     </a>
 
     <!-- Rider -->
     <a class="role-card" href="rider.html">
-      <div class="glyph">🛵</div>
+      <div class="glyph">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><path d="M15 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2zm-3 5.5l1.5-4.5h3.5l2 4"/><path d="M9 17.5l2-6.5h3.5l1.5 6.5"/></svg>
+      </div>
       <h3>Delivery Partner Portal</h3>
-      <p>Duty toggle (Online/Offline), turn-by-turn progression, trip earnings tracker, and customer 4-digit PIN verification modal.</p>
+      <p>Duty toggle (Online/Offline), turn-by-turn order progression, shift earnings metrics, and customer 4-digit PIN verification.</p>
     </a>
 
     <!-- Admin -->
     <a class="role-card" href="admin.html">
-      <div class="glyph">📊</div>
+      <div class="glyph">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+      </div>
       <h3>Operations & Finance Admin</h3>
-      <p>Real-time platform financial economics (GOV, 18% commission, net margin), fleet availability, and manual dispatcher overrides.</p>
+      <p>Real-time platform metrics (Gross Order Value, 18% commission, net margin), active fleet capacity, and manual dispatcher overrides.</p>
     </a>
   </div>
 </div>
 
+<script src="js/icons.js"></script>
 <script src="js/api.js"></script>
 <script>
   // Dynamic user session check
@@ -91,14 +110,18 @@
     if (user) {
       const container = document.getElementById('indexHeaderActions');
       container.innerHTML = `
-        <button id="phoneModalBtn" class="btn-secondary hide-mobile" style="padding:6px 12px; font-size:12px; color:var(--primary); border-color:var(--primary);">
-          📱 Open on Phone
+        <button id="phoneModalBtn" class="btn-secondary hide-mobile" style="padding:6px 12px; font-size:12px; color:var(--primary); border-color:var(--primary); display:inline-flex; align-items:center; gap:6px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+          Mobile Access
         </button>
-        <button id="pwaInstallBtn" class="btn-secondary hide-mobile" onclick="PWA.install()" style="display:none; padding:6px 12px; font-size:12px; color:var(--primary); border-color:var(--primary);">
-          📱 Install App
+        <button id="pwaInstallBtn" class="btn-secondary hide-mobile" onclick="PWA.install()" style="display:none; padding:6px 12px; font-size:12px; color:var(--primary); border-color:var(--primary); align-items:center; gap:6px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Install App
         </button>
         <div class="header-user-pill" title="${user.name} (${user.role})">
-          <span class="user-avatar-micro">👤</span>
+          <span class="user-avatar-micro" style="display:inline-flex; align-items:center;">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          </span>
           <span class="user-display-name">${user.name.split(' ')[0]}</span>
         </div>
         <button id="idxLogout" class="btn-secondary idx-logout-btn">Sign Out</button>
@@ -126,18 +149,20 @@
         const activeUrl = useHttps ? staticDomain : net.localUrl;
         overlay.innerHTML = `
           <div class="modal-card" style="max-width:440px; text-align:center;">
-            <div style="font-size:36px; margin-bottom:6px;">📱</div>
-            <h3 style="font-size:19px; margin-bottom:4px;">Open on Real Mobile Phone</h3>
+            <div style="width:48px; height:48px; border-radius:12px; background:var(--primary-soft); color:var(--primary); display:inline-flex; align-items:center; justify-content:center; margin-bottom:12px;">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+            </div>
+            <h3 style="font-size:19px; margin-bottom:4px;">Mobile Device Access</h3>
             <p style="font-size:13px; color:var(--ink-secondary); margin:0 0 14px;">
-              Scan this QR code with your smartphone camera to launch Foodie Express!
+              Scan this QR code with your smartphone camera to connect to the platform.
             </p>
 
             <div style="display:flex; justify-content:center; gap:8px; margin-bottom:14px;">
               <button class="btn-secondary" id="toggleHttpsBtn" style="padding:6px 14px; font-size:12px; border-radius:999px; ${useHttps ? 'background:var(--primary); color:#fff; border-color:var(--primary); font-weight:700;' : ''}">
-                🔒 Permanent HTTPS (Recommended)
+                HTTPS Tunnel
               </button>
               <button class="btn-secondary" id="toggleWifiBtn" style="padding:6px 14px; font-size:12px; border-radius:999px; ${!useHttps ? 'background:var(--primary); color:#fff; border-color:var(--primary); font-weight:700;' : ''}">
-                📶 Local Wi-Fi
+                Local Wi-Fi
               </button>
             </div>
 
@@ -147,14 +172,9 @@
 
             <div style="background:var(--surface-alt); padding:10px 14px; border-radius:var(--radius-sm); border:1px solid var(--border); font-size:13px; margin-bottom:14px; word-break:break-all;">
               <div style="font-size:11px; font-weight:700; color:var(--ink-secondary); text-transform:uppercase; margin-bottom:2px;">
-                ${useHttps ? '🔒 Permanent Fixed HTTPS Address' : '📶 Local Wi-Fi Address'}
+                ${useHttps ? 'Public Secure Address' : 'Local Network Address'}
               </div>
               <code style="font-weight:800; font-size:13px; color:var(--primary);">${activeUrl}</code>
-            </div>
-
-            <div style="font-size:12px; color:var(--ink-secondary); text-align:left; background:#FFF7ED; border:1px dashed var(--primary); padding:10px 12px; border-radius:var(--radius-sm); margin-bottom:16px;">
-              <strong>💡 Permanent Domain Activated!</strong><br>
-              This link <strong>never changes</strong>. Run <code>npm run tunnel</code> or double-click <code>tunnel.bat</code> to connect.
             </div>
 
             <button class="btn-secondary" id="closePhoneModal" style="width:100%;">Close</button>
@@ -174,7 +194,7 @@
   }
 
   document.addEventListener('click', (e) => {
-    if (e.target && e.target.id === 'phoneModalBtn') {
+    if (e.target && (e.target.id === 'phoneModalBtn' || e.target.closest('#phoneModalBtn'))) {
       openPhoneModal();
     }
   });

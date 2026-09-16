@@ -3,27 +3,34 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Rider Delivery Partner · Foodie Express</title>
+<title>Delivery Partner · Foodie Express</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#FF5200">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="FoodieExpress">
 <link rel="apple-touch-icon" href="icons/icon.svg">
+<link rel="icon" type="image/svg+xml" href="icons/icon.svg">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 <div class="app-shell">
   <div class="masthead">
     <div class="brand">
-      <div class="brand-icon">🛵</div>
+      <div class="brand-icon">
+        <img src="icons/icon.svg" alt="Foodie Express Logo">
+      </div>
       <div>FOODIE <span>EXPRESS</span></div>
     </div>
     <div class="header-actions">
-      <button id="pwaInstallBtn" class="btn-secondary hide-mobile" onclick="PWA.install()" style="display:none; padding:5px 10px; font-size:11px; color:var(--primary); border-color:var(--primary);">
-        📱 App
+      <button id="pwaInstallBtn" class="btn-secondary hide-mobile" onclick="PWA.install()" style="display:none; padding:5px 10px; font-size:11px; color:var(--primary); border-color:var(--primary); align-items:center; gap:5px;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        App
       </button>
-      <a class="btn-secondary hide-mobile" href="index.html" style="padding:6px 12px; font-size:12px;">⇄ Switch Role</a>
+      <a class="btn-secondary hide-mobile" href="index.html" style="padding:6px 12px; font-size:12px; display:inline-flex; align-items:center; gap:5px;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        Switch Role
+      </a>
       <div class="role-tag hide-mobile" id="activeRiderTag">Delivery Partner</div>
     </div>
   </div>
@@ -32,6 +39,7 @@
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
+<script src="js/icons.js"></script>
 <script src="js/api.js"></script>
 <script src="js/rider.js"></script>
 </body>

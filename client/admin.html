@@ -3,26 +3,35 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Platform Operations Console · Foodie Express</title>
+<title>Operations Admin · Foodie Express</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#FF5200">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="FoodieExpress">
 <link rel="apple-touch-icon" href="icons/icon.svg">
+<link rel="icon" type="image/svg+xml" href="icons/icon.svg">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 <div class="app-shell wide">
   <div class="masthead">
     <div class="brand">
-      <div class="brand-icon">📊</div>
+      <div class="brand-icon">
+        <img src="icons/icon.svg" alt="Foodie Express Logo">
+      </div>
       <div>FOODIE <span>EXPRESS</span></div>
     </div>
     <div class="header-actions">
-      <button id="phoneModalBtn" class="btn-secondary admin-qr-btn" title="Open QR Code to connect mobile devices" style="padding:3px 9px; font-size:11px; color:var(--primary); border-color:var(--primary); font-weight:700; border-radius:999px; display:inline-flex; align-items:center; gap:4px; height:24px; white-space:nowrap; cursor:pointer;">📱 QR</button>
-      <a class="btn-secondary hide-mobile" href="index.html" style="padding:6px 12px; font-size:12px;">⇄ Switch Role</a>
-      <div class="role-tag hide-mobile" style="background:var(--purple-soft); color:var(--purple); border-color:var(--purple);">Admin Console</div>
+      <button id="phoneModalBtn" class="btn-secondary admin-qr-btn" title="Open QR Code to connect mobile devices" style="padding:4px 10px; font-size:11px; color:var(--primary); border-color:var(--primary); font-weight:700; border-radius:999px; display:inline-flex; align-items:center; gap:5px; height:26px; white-space:nowrap; cursor:pointer;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        Mobile Access
+      </button>
+      <a class="btn-secondary hide-mobile" href="index.html" style="padding:6px 12px; font-size:12px; display:inline-flex; align-items:center; gap:5px;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        Switch Role
+      </a>
+      <div class="role-tag hide-mobile" style="background:var(--purple-soft); color:var(--purple); border-color:var(--purple);">Operations Admin</div>
     </div>
   </div>
 
@@ -30,6 +39,7 @@
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
+<script src="js/icons.js"></script>
 <script src="js/api.js"></script>
 <script src="js/admin.js"></script>
 <script>
@@ -49,10 +59,10 @@
       overlay.className = 'modal-overlay';
 
       const roleLabels = {
-        customer: '🧑‍🍳 Customer App',
-        kitchen: '🏪 Kitchen KDS',
-        rider: '🛵 Rider Portal',
-        admin: '📊 Admin Console'
+        customer: 'Customer Portal',
+        kitchen: 'Kitchen KDS',
+        rider: 'Rider Portal',
+        admin: 'Admin Console'
       };
 
       function renderContent() {
@@ -61,29 +71,29 @@
           <div class="modal-card" style="max-width:480px; text-align:center;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
               <h3 style="font-size:18px; margin:0; display:flex; align-items:center; gap:8px;">
-                <span>📱</span> Open on Real Mobile Phone
+                Mobile Device Access
               </h3>
               <button class="btn-secondary" id="closePhoneModal" style="padding:4px 8px; font-size:12px;">✕</button>
             </div>
             
             <p style="font-size:13px; color:var(--ink-secondary); margin:0 0 14px; text-align:left;">
-              Select a role and protocol to generate a real-time QR code:
+              Select a portal and protocol to generate a real-time QR code:
             </p>
 
             <!-- Protocol Selector -->
             <div style="display:flex; justify-content:center; gap:8px; margin-bottom:14px;">
               <button class="btn-secondary" id="toggleHttpsBtn" style="padding:5px 12px; font-size:11px; border-radius:999px; ${useHttps ? 'background:var(--primary); color:#fff; border-color:var(--primary); font-weight:700;' : ''}">
-                🔒 Permanent HTTPS
+                HTTPS Tunnel
               </button>
               <button class="btn-secondary" id="toggleWifiBtn" style="padding:5px 12px; font-size:11px; border-radius:999px; ${!useHttps ? 'background:var(--primary); color:#fff; border-color:var(--primary); font-weight:700;' : ''}">
-                📶 Local Wi-Fi
+                Local Wi-Fi
               </button>
             </div>
 
             <!-- Role Selector Pills -->
             <div style="display:flex; gap:6px; margin-bottom:16px; justify-content:center; flex-wrap:wrap;">
               ${Object.keys(roleLabels).map(role => `
-                <button class="btn-secondary pill-role-btn" data-role="${role}" style="padding:6px 12px; font-size:12px; border-radius:999px; ${currentRole === role ? 'background:var(--primary); color:#fff; border-color:var(--primary);' : ''}">
+                <button class="btn-secondary pill-role-btn" data-role="${role}" style="padding:6px 12px; font-size:12px; border-radius:999px; ${currentRole === role ? 'background:var(--primary); color:#fff; border-color:var(--primary); font-weight:700;' : ''}">
                   ${roleLabels[role]}
                 </button>
               `).join('')}
@@ -95,18 +105,16 @@
             </div>
 
             <div style="background:var(--surface-alt); padding:10px 14px; border-radius:var(--radius-sm); border:1px solid var(--border); font-size:13px; margin-bottom:14px; word-break:break-all;">
-              <div style="font-size:11px; font-weight:700; color:var(--ink-secondary); text-transform:uppercase; margin-bottom:2px;">Target Mobile URL</div>
+              <div style="font-size:11px; font-weight:700; color:var(--ink-secondary); text-transform:uppercase; margin-bottom:2px;">Target Address</div>
               <code style="font-weight:800; font-size:13px; color:var(--primary);">${url}</code>
             </div>
 
-            <div style="font-size:12px; color:var(--ink-secondary); text-align:left; background:#FFF7ED; border:1px dashed var(--primary); padding:10px 12px; border-radius:var(--radius-sm);">
-              <strong>💡 Permanent Domain Connected!</strong><br>
-              This link is static and never changes. Run <code>npm run tunnel</code> or double-click <code>tunnel.bat</code>.
-            </div>
+            <button class="btn-secondary" id="closePhoneModalBtn" style="width:100%;">Close</button>
           </div>
         `;
 
         overlay.querySelector('#closePhoneModal').addEventListener('click', () => overlay.remove());
+        overlay.querySelector('#closePhoneModalBtn').addEventListener('click', () => overlay.remove());
         overlay.querySelector('#toggleHttpsBtn').addEventListener('click', () => { useHttps = true; renderContent(); });
         overlay.querySelector('#toggleWifiBtn').addEventListener('click', () => { useHttps = false; renderContent(); });
         overlay.querySelectorAll('.pill-role-btn').forEach(btn => {

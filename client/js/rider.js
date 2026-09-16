@@ -88,11 +88,13 @@ function renderPicker() {
     <div class="grid cols-4">
       ${state.riders.map(r => `
         <div class="rest-card" data-id="${r.id}">
-          <div class="banner">🛵</div>
+          <div class="banner" style="display:flex; align-items:center; justify-content:center;">
+            ${typeof Icons !== 'undefined' ? Icons.rider(28, 'var(--primary)') : 'Partner'}
+          </div>
           <h3>${r.name}</h3>
-          <div class="cuisine">${r.vehicle || 'Bike'} · 📞 ${r.phone || '9876543210'}</div>
+          <div class="cuisine">${r.vehicle || 'Bike'} · ${r.phone || '9876543210'}</div>
           <div class="meta-row">
-            <span class="rating-badge">★ ${r.rating || 4.8}</span>
+            <span class="rating-badge">${typeof Icons !== 'undefined' ? Icons.star(12) : ''} ${r.rating || 4.8}</span>
             <span class="badge ${r.status === 'AVAILABLE' ? 'open' : r.status === 'BUSY' ? 'busy' : 'closed'}">
               ${r.status}
             </span>
@@ -116,7 +118,7 @@ function render() {
   const rider = state.riders.find(r => String(r.id) === String(state.activeRiderId));
   if (!rider) { renderPicker(); return; }
 
-  document.getElementById('activeRiderTag').textContent = `🛵 ${rider.name}`;
+  document.getElementById('activeRiderTag').textContent = rider.name;
 
   const isOnline = rider.status !== 'OFFLINE';
 
@@ -124,51 +126,58 @@ function render() {
     <!-- Top Status & Earnings Bar -->
     <div class="card" style="margin-bottom:20px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:14px;">
       <div style="display:flex; align-items:center; gap:14px;">
-        <div style="font-size:32px;">🛵</div>
+        <div style="width:48px; height:48px; border-radius:12px; background:var(--primary-soft); color:var(--primary); display:flex; align-items:center; justify-content:center;">
+          ${typeof Icons !== 'undefined' ? Icons.rider(26) : ''}
+        </div>
         <div>
-          <h2 style="font-size:20px;">${rider.name}</h2>
+          <h2 style="font-size:20px; margin:0 0 2px;">${rider.name}</h2>
           <div style="font-size:13px; color:var(--ink-secondary);">
-            ${rider.vehicle || 'Bike'} · ★ ${rider.rating || 4.8} · 💰 Earnings: <strong>₹${rider.earnings || 0}</strong>
+            ${rider.vehicle || 'Bike'} · ${typeof Icons !== 'undefined' ? Icons.star(12) : '★'} ${rider.rating || 4.8} · Shift Earnings: <strong>₹${rider.earnings || 0}</strong>
           </div>
         </div>
       </div>
 
       <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
         <!-- Online/Offline Duty Toggle -->
-        <div class="duty-switch">
-          <span>${isOnline ? '🟢 Online' : '⚪ Offline'}</span>
+        <div class="duty-switch" style="display:flex; align-items:center; gap:8px;">
+          <span style="display:flex; align-items:center; gap:6px; font-weight:700; font-size:13px;">
+            <span style="width:8px; height:8px; border-radius:50%; background:${isOnline ? 'var(--green)' : 'var(--ink-muted)'}; display:inline-block;"></span>
+            ${isOnline ? 'Active on Duty' : 'Offline'}
+          </span>
           <div class="switch-toggle ${isOnline ? 'on' : ''}" id="dutyToggleBtn"></div>
         </div>
 
-        <button class="btn-secondary" id="switchRiderBtn">⇄ Switch Rider</button>
+        <button class="btn-secondary" id="switchRiderBtn">Switch Profile</button>
       </div>
     </div>
 
     <!-- Active Runs Section -->
     <div style="margin-bottom:16px;">
-      <h3 style="font-size:16px; margin-bottom:4px;">Assigned Delivery Trips</h3>
-      <p style="color:var(--ink-secondary); font-size:13px; margin:0;">Follow pickup and dropoff steps below.</p>
+      <h3 style="font-size:16px; margin-bottom:4px;">Assigned Deliveries</h3>
+      <p style="color:var(--ink-secondary); font-size:13px; margin:0;">Complete pickup and doorstep delivery handoffs:</p>
     </div>
 
     ${state.orders.length ? state.orders.map(o => `
       <div class="ticket">
         <div class="ticket-head">
           <div>
-            <div class="ticket-id">Trip #${o.id} · ${o.restaurant_emoji} ${o.restaurant_name}</div>
-            <div class="ticket-sub">Pickup from restaurant → Deliver to: <strong>${o.customer_name}</strong></div>
+            <div class="ticket-id">Trip #${o.id} · ${o.restaurant_name}</div>
+            <div class="ticket-sub">Deliver to: <strong>${o.customer_name}</strong></div>
           </div>
           <div class="stamp st-${o.status}">${STATUS_LABEL[o.status] || o.status}</div>
         </div>
 
         <div class="card" style="background:var(--surface-alt); padding:14px; margin-bottom:14px;">
-          <div style="font-size:13px; margin-bottom:6px;">
-            📍 <strong>Pickup:</strong> ${o.restaurant_name}
+          <div style="font-size:13px; margin-bottom:6px; display:flex; align-items:center; gap:6px;">
+            <span style="color:var(--primary);">${typeof Icons !== 'undefined' ? Icons.kitchen(14) : ''}</span>
+            <strong>Pickup:</strong> ${o.restaurant_name}
           </div>
-          <div style="font-size:13px; margin-bottom:8px;">
-            🏠 <strong>Drop-off:</strong> ${o.customer_address} (📞 ${o.customer_phone || 'N/A'})
+          <div style="font-size:13px; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
+            <span style="color:var(--green);">${typeof Icons !== 'undefined' ? Icons.location(14) : ''}</span>
+            <strong>Drop-off:</strong> ${o.customer_address} (${o.customer_phone || 'N/A'})
           </div>
           <div style="display:flex; justify-content:space-between; align-items:center; font-size:14px; font-weight:800; border-top:1px dashed var(--border); padding-top:8px;">
-            <span>💵 Collect Amount:</span>
+            <span>Order Value:</span>
             <span style="color:var(--primary);">₹${o.total} (${o.payment_method})</span>
           </div>
         </div>
@@ -177,25 +186,27 @@ function render() {
         <div>
           ${o.status === 'ASSIGNED' ? `
             <button class="btn-primary" data-action="PICKED_UP" data-id="${o.id}" style="width:100%;">
-              📦 Confirm Pickup from Kitchen
+              Confirm Pickup from Kitchen
             </button>
           ` : o.status === 'PICKED_UP' ? `
             <button class="btn-primary" data-action="OUT_FOR_DELIVERY" data-id="${o.id}" style="width:100%; background:var(--blue);">
-              🚀 Start Journey to Customer
+              Start Journey to Customer
             </button>
           ` : o.status === 'OUT_FOR_DELIVERY' ? `
-            <button class="btn-primary" id="openOtpModalBtn" data-id="${o.id}" style="width:100%; background:var(--green);">
-              🔒 Enter Customer 4-Digit PIN & Mark Delivered
+            <button class="btn-primary" id="openOtpModalBtn" data-id="${o.id}" style="width:100%; background:var(--green); display:inline-flex; align-items:center; justify-content:center; gap:6px;">
+              ${typeof Icons !== 'undefined' ? Icons.check(16) : ''} Verify Customer PIN & Complete Delivery
             </button>
           ` : ''}
         </div>
       </div>
     `).join('') : `
       <div class="card" style="text-align:center; padding:60px 20px;">
-        <div style="font-size:42px; margin-bottom:12px;">😴</div>
-        <h3>No deliveries assigned right now</h3>
-        <p style="color:var(--ink-secondary); font-size:14px; max-width:400px; margin:8px auto 0;">
-          ${isOnline ? 'You are marked Online! As soon as a kitchen marks food Ready, the system will dispatch it to you automatically.' : 'You are currently Offline. Toggle duty switch above to start receiving orders.'}
+        <div style="width:52px; height:52px; border-radius:14px; background:var(--surface-alt); margin:0 auto 14px; display:flex; align-items:center; justify-content:center; color:var(--ink-muted);">
+          ${typeof Icons !== 'undefined' ? Icons.rider(26) : ''}
+        </div>
+        <h3 style="font-size:17px; margin-bottom:4px;">No active delivery assignments</h3>
+        <p style="color:var(--ink-secondary); font-size:14px; max-width:400px; margin:4px auto 0;">
+          ${isOnline ? 'You are marked Online. Once a kitchen marks an order Ready, it will be automatically dispatched to you.' : 'You are currently Offline. Turn on your duty switch above to start receiving trips.'}
         </p>
       </div>
     `}
@@ -245,10 +256,12 @@ function renderVerifyOtpModal(orderId) {
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
     <div class="modal-card" style="max-width:400px; text-align:center;">
-      <div style="font-size:36px; margin-bottom:8px;">🔒</div>
-      <h3 style="font-size:18px;">Customer Delivery PIN</h3>
+      <div style="width:52px; height:52px; border-radius:14px; background:var(--green-soft); color:var(--green); margin:0 auto 14px; display:flex; align-items:center; justify-content:center;">
+        ${typeof Icons !== 'undefined' ? Icons.lock(24) : ''}
+      </div>
+      <h3 style="font-size:18px; margin-bottom:4px;">Customer Delivery PIN</h3>
       <p style="font-size:13px; color:var(--ink-secondary); margin:6px 0 18px;">
-        Please ask customer for their 4-digit code shown on their tracking screen to complete handover.
+        Please ask customer for the 4-digit verification PIN displayed on their tracking screen.
       </p>
 
       <div style="margin-bottom:18px;">
@@ -283,7 +296,7 @@ function renderVerifyOtpModal(orderId) {
       await API.verifyOtp(orderId, code);
       overlay.remove();
       AudioFx.play('success');
-      toast('Delivery verified successfully! +₹35 added to earnings.', 'success');
+      toast('Delivery verified successfully! Payout credited.', 'success');
       await loadOrders();
       state.riders = await API.get('/api/riders');
       render();

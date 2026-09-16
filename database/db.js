@@ -133,6 +133,10 @@ addColumnIfNotExists('orders', 'dest_lat REAL');
 addColumnIfNotExists('orders', 'dest_lng REAL');
 addColumnIfNotExists('orders', 'delivery_otp TEXT DEFAULT "1234"');
 addColumnIfNotExists('orders', 'cancel_reason TEXT');
+addColumnIfNotExists('orders', 'coupon_code TEXT');
+addColumnIfNotExists('orders', 'discount_amount REAL DEFAULT 0');
+addColumnIfNotExists('orders', 'rating INTEGER');
+addColumnIfNotExists('orders', 'review_text TEXT');
 
 // Backfill distinct coordinates for map visualization
 try {

@@ -1,20 +1,44 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <defs>
-    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#FF5200" />
-      <stop offset="100%" stop-color="#E04800" />
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF5A1F" />
+      <stop offset="50%" stop-color="#FF3E00" />
+      <stop offset="100%" stop-color="#DE2A00" />
     </linearGradient>
-    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
-      <feDropShadow dx="0" dy="16" stdDeviation="20" flood-color="#000000" flood-opacity="0.25"/>
+    <linearGradient id="wingGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="100%" stop-color="#FFE8DF" />
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.95" />
+      <stop offset="100%" stop-color="#FFC5B2" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#5B0E00" flood-opacity="0.35"/>
     </filter>
   </defs>
-  <!-- Background Rounded App Tile -->
-  <rect width="512" height="512" rx="112" fill="url(#grad)" />
-  <!-- Center Badge Circle -->
-  <circle cx="256" cy="230" r="145" fill="#FFFFFF" opacity="0.18" />
-  <!-- Food / Delivery Icon Graphic -->
-  <text x="256" y="275" font-size="160" text-anchor="middle" filter="url(#shadow)">🍔</text>
-  <!-- Brand Label -->
-  <text x="256" y="425" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-weight="900" font-size="46" fill="#FFFFFF" text-anchor="middle" letter-spacing="4">FOODIE</text>
-  <text x="256" y="465" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-weight="700" font-size="22" fill="#FFE0D3" text-anchor="middle" letter-spacing="6">EXPRESS</text>
+
+  <!-- Modern Squircle Icon Container -->
+  <rect width="512" height="512" rx="120" fill="url(#bgGrad)" />
+  
+  <!-- Subtle Ambient Internal Ring -->
+  <circle cx="256" cy="256" r="190" fill="none" stroke="#FFFFFF" stroke-opacity="0.08" stroke-width="2" />
+  <circle cx="256" cy="256" r="140" fill="none" stroke="#FFFFFF" stroke-opacity="0.05" stroke-width="2" />
+
+  <!-- Speed Motion Trails -->
+  <path d="M 120 220 L 195 220" stroke="#FFFFFF" stroke-width="12" stroke-linecap="round" opacity="0.35" />
+  <path d="M 95 256 L 180 256" stroke="#FFFFFF" stroke-width="12" stroke-linecap="round" opacity="0.5" />
+  <path d="M 130 292 L 190 292" stroke="#FFFFFF" stroke-width="12" stroke-linecap="round" opacity="0.25" />
+
+  <!-- Primary Dynamic Geometric "F" + Speed Wing Monogram -->
+  <g filter="url(#glow)">
+    <!-- Main Upper Sweeping Wing -->
+    <path d="M 215 145 C 240 145 350 145 385 145 C 405 145 415 168 400 182 L 345 235 C 338 242 328 246 318 246 L 255 246 L 255 272 L 315 272 C 332 272 342 290 330 302 L 305 328 C 298 335 288 339 278 339 L 255 339 L 255 385 C 255 398 244 408 231 408 L 205 408 C 192 408 182 398 182 385 L 182 178 C 182 160 196 145 215 145 Z" fill="url(#wingGrad)" />
+    
+    <!-- Forward Dynamic Kinetic Arrow Cutout -->
+    <path d="M 330 246 L 390 246 C 408 246 418 266 406 278 L 360 324 C 352 332 340 337 329 337 L 275 337 L 310 272 C 318 257 325 246 330 246 Z" fill="url(#accentGrad)" opacity="0.9" />
+
+    <!-- Leading Speed Spark -->
+    <circle cx="410" cy="162" r="8" fill="#FFFFFF" opacity="0.85" />
+  </g>
 </svg>

@@ -48,9 +48,9 @@ async function init() {
   } catch (err) {
     console.error('Failed to init vendor app:', err);
     renderErrorScreen(view, {
-      title: "Vendor Kitchen Offline",
-      desc: "Unable to connect to the restaurant live order dispatch system. Check back in a moment as the system reconnects.",
-      badge: "Kitchen Standby",
+      title: "Kitchen Terminal Offline",
+      desc: "Unable to sync with live kitchen tickets. Please check your network while we attempt reconnection.",
+      badge: "KDS Paused",
       error: err,
       onRetry: () => location.reload(),
       retryText: "Reconnect Kitchen",
@@ -61,21 +61,22 @@ async function init() {
 
 socket.on('order:update', async (order) => {
   if (String(order.restaurant_id) === String(state.activeRestaurantId)) {
-    const isNew = !state.orders.some(o => o.id === order.id);
+    const prevOrder = state.orders.find(o => o.id === order.id);
+    const isNew = !prevOrder;
+
     await loadOrders();
     render();
 
     if (order.status === 'PLACED' || isNew) {
       AudioFx.play('chime');
-      toast(`🔔 New incoming order #${order.id} from ${order.customer_name}!`, 'info');
+      toast(`New incoming order #${order.id} from ${order.customer_name}`, 'info');
     } else {
-      toast(`Order #${order.id} updated → ${STATUS_LABEL[order.status] || order.status}`);
+      AudioFx.play('alert');
     }
   }
 });
 
 async function loadOrders() {
-  if (!state.activeRestaurantId) return;
   state.orders = await API.get(`/api/vendor/${state.activeRestaurantId}/orders`);
 }
 
@@ -83,17 +84,19 @@ function renderPicker() {
   document.getElementById('activeRestaurantTag').textContent = 'Select Kitchen';
   view.innerHTML = `
     <div style="margin-bottom:24px;">
-      <h2>Kitchen Display System (KDS)</h2>
-      <p style="color:var(--ink-secondary); font-size:14px;">Select the restaurant kitchen you want to manage:</p>
+      <h2>Select Restaurant Kitchen</h2>
+      <p style="color:var(--ink-secondary); font-size:14px;">Choose the restaurant kitchen terminal to manage incoming tickets:</p>
     </div>
-    <div class="grid cols-3">
+    <div class="grid cols-4">
       ${state.restaurants.map(r => `
         <div class="rest-card" data-id="${r.id}">
-          <div class="banner">${r.emoji}</div>
+          <div class="banner" style="display:flex; align-items:center; justify-content:center; background:linear-gradient(135deg, var(--primary-soft), var(--surface-alt));">
+            ${typeof Icons !== 'undefined' ? Icons.kitchen(28, 'var(--primary)') : ''}
+          </div>
           <h3>${r.name}</h3>
           <div class="cuisine">${r.cuisine}</div>
           <div class="meta-row">
-            <span class="rating-badge">★ ${r.rating}</span>
+            <span>Rating ${r.rating || 4.5}</span>
             <span class="badge ${r.is_open ? 'open' : 'closed'}">${r.is_open ? 'Active' : 'Closed'}</span>
           </div>
         </div>
@@ -117,7 +120,7 @@ function groupOrders() {
     if (o.status === 'PLACED') groups.incoming.push(o);
     else if (['ACCEPTED', 'PREPARING'].includes(o.status)) groups.cooking.push(o);
     else if (['READY', 'ASSIGNED', 'PICKED_UP', 'OUT_FOR_DELIVERY'].includes(o.status)) groups.ready.push(o);
-    else groups.history.push(o);
+    else if (['DELIVERED', 'REJECTED', 'CANCELLED'].includes(o.status)) groups.history.push(o);
   }
   return groups;
 }
@@ -126,7 +129,7 @@ function render() {
   const r = state.restaurants.find(x => String(x.id) === String(state.activeRestaurantId));
   if (!r) { renderPicker(); return; }
 
-  document.getElementById('activeRestaurantTag').textContent = `${r.emoji} ${r.name}`;
+  document.getElementById('activeRestaurantTag').textContent = r.name;
 
   const groups = groupOrders();
 
@@ -134,15 +137,17 @@ function render() {
     <!-- Top Action Bar -->
     <div class="card" style="margin-bottom:20px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:14px;">
       <div style="display:flex; align-items:center; gap:14px;">
-        <div style="font-size:32px;">${r.emoji}</div>
+        <div style="width:48px; height:48px; border-radius:12px; background:var(--primary-soft); color:var(--primary); display:flex; align-items:center; justify-content:center;">
+          ${typeof Icons !== 'undefined' ? Icons.kitchen(24) : ''}
+        </div>
         <div>
-          <h2 style="font-size:20px;">${r.name}</h2>
-          <div style="font-size:13px; color:var(--ink-secondary);">Kitchen Display System (KDS) · ${r.cuisine}</div>
+          <h2 style="font-size:20px; margin:0 0 2px;">${r.name}</h2>
+          <div style="font-size:13px; color:var(--ink-secondary);">Kitchen Display Terminal (KDS) · ${r.cuisine}</div>
         </div>
       </div>
       <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-        <button class="btn-secondary" id="manageMenuBtn">📋 Manage Item Stock</button>
-        <button class="btn-secondary" id="switchRestBtn">⇄ Switch Restaurant</button>
+        <button class="btn-secondary" id="manageMenuBtn">Item Stock Control</button>
+        <button class="btn-secondary" id="switchRestBtn">Switch Kitchen</button>
       </div>
     </div>
 
@@ -152,14 +157,14 @@ function render() {
       <div class="kds-col">
         <div class="kds-header">
           <div style="display:flex; align-items:center; gap:8px;">
-            <span>🔔 Incoming Orders</span>
+            <span>Incoming Orders</span>
             <span class="kds-badge" style="color:var(--amber);">${groups.incoming.length}</span>
           </div>
           <span style="font-size:11px; color:var(--ink-muted);">Action Required</span>
         </div>
         ${groups.incoming.length ? groups.incoming.map(o => renderOrderCard(o)).join('') : `
           <div style="text-align:center; padding:50px 10px; color:var(--ink-muted); font-size:13px;">
-            No incoming orders.<br>New customer orders will chime here!
+            No incoming orders.<br>New customer tickets will chime here.
           </div>
         `}
       </div>
@@ -168,14 +173,14 @@ function render() {
       <div class="kds-col">
         <div class="kds-header">
           <div style="display:flex; align-items:center; gap:8px;">
-            <span>🍳 Kitchen Prep</span>
+            <span>Cooking Queue</span>
             <span class="kds-badge" style="color:var(--blue);">${groups.cooking.length}</span>
           </div>
-          <span style="font-size:11px; color:var(--ink-muted);">Cooking</span>
+          <span style="font-size:11px; color:var(--ink-muted);">In Preparation</span>
         </div>
         ${groups.cooking.length ? groups.cooking.map(o => renderOrderCard(o)).join('') : `
           <div style="text-align:center; padding:50px 10px; color:var(--ink-muted); font-size:13px;">
-            Kitchen is clear.<br>Orders being cooked appear here.
+            Kitchen queue is clear.<br>Dishes being prepared appear here.
           </div>
         `}
       </div>
@@ -184,10 +189,10 @@ function render() {
       <div class="kds-col">
         <div class="kds-header">
           <div style="display:flex; align-items:center; gap:8px;">
-            <span>🛵 Ready & Dispatched</span>
+            <span>Ready & Dispatched</span>
             <span class="kds-badge" style="color:var(--green);">${groups.ready.length}</span>
           </div>
-          <span style="font-size:11px; color:var(--ink-muted);">Rider Logistics</span>
+          <span style="font-size:11px; color:var(--ink-muted);">Partner Hand-off</span>
         </div>
         ${groups.ready.length ? groups.ready.map(o => renderOrderCard(o, false)).join('') : `
           <div style="text-align:center; padding:50px 10px; color:var(--ink-muted); font-size:13px;">
@@ -199,25 +204,32 @@ function render() {
 
     <!-- Collapsible History -->
     <div style="margin-top:24px;">
-      <button class="btn-secondary" id="toggleHistoryBtn" style="width:100%; justify-content:center;">
-        ${state.showHistory ? '▲ Hide Completed Order History' : `▼ View Completed & Past Orders (${groups.history.length})`}
+      <button class="btn-secondary" id="toggleHistoryBtn" style="font-size:12px; padding:6px 14px;">
+        ${state.showHistory ? 'Hide Past Orders' : `View Past Orders (${groups.history.length})`}
       </button>
 
-      ${state.showHistory ? `
-        <div class="card" style="margin-top:14px;">
-          <table class="data">
+      ${state.showHistory && groups.history.length ? `
+        <div class="card" style="margin-top:12px; overflow-x:auto;">
+          <table class="admin-table">
             <thead>
-              <tr><th>#</th><th>Customer</th><th>Items</th><th>Total</th><th>Status</th><th>Time</th></tr>
+              <tr>
+                <th>Order ID</th>
+                <th>Customer</th>
+                <th>Items</th>
+                <th>Total</th>
+                <th>Status</th>
+                <th>Time</th>
+              </tr>
             </thead>
             <tbody>
               ${groups.history.map(o => `
                 <tr>
-                  <td style="font-weight:700;">#${o.id}</td>
+                  <td><strong>#${o.id}</strong></td>
                   <td>${o.customer_name}</td>
                   <td>${o.items.map(i => `${i.qty}×${i.name}`).join(', ')}</td>
-                  <td style="font-weight:700;">₹${o.total}</td>
-                  <td><span class="stamp st-${o.status}" style="font-size:10px; padding:3px 8px;">${STATUS_LABEL[o.status]}</span></td>
-                  <td style="color:var(--ink-muted);">${timeAgo(o.created_at)}</td>
+                  <td>₹${o.total}</td>
+                  <td><span class="stamp st-${o.status}">${STATUS_LABEL[o.status] || o.status}</span></td>
+                  <td style="color:var(--ink-muted); font-size:12px;">${timeAgo(o.created_at)}</td>
                 </tr>
               `).join('')}
             </tbody>
@@ -240,14 +252,11 @@ function render() {
     render();
   });
 
-  // Attach status transition handlers
   view.querySelectorAll('[data-action]').forEach(btn => {
     btn.addEventListener('click', async () => {
-      const orderId = btn.dataset.id;
-      const nextStatus = btn.dataset.action;
       try {
         btn.disabled = true;
-        await API.patch(`/api/orders/${orderId}/status`, { status: nextStatus });
+        await API.patch(`/api/orders/${btn.dataset.id}/status`, { status: btn.dataset.action });
         AudioFx.play('alert');
         await loadOrders();
         render();
@@ -259,22 +268,22 @@ function render() {
   });
 }
 
-function renderOrderCard(order, showAction = true) {
-  const elapsed = elapsedMinutes(order.created_at);
+function renderOrderCard(order, allowAction = true) {
+  const elapsed = Math.floor((Date.now() - new Date(order.created_at.replace(' ', 'T') + 'Z').getTime()) / 60000);
   let slaClass = 'normal';
   if (elapsed >= 18) slaClass = 'delayed';
   else if (elapsed >= 10) slaClass = 'warning';
 
   let actionHtml = '';
-  if (showAction) {
+  if (allowAction) {
     if (order.status === 'PLACED') {
       actionHtml = `
         <div style="display:flex; gap:8px; margin-top:12px;">
           <button class="btn-primary" data-action="ACCEPTED" data-id="${order.id}" style="flex:1; padding:8px 12px; font-size:12px;">
-            ✔ Accept Order
+            Accept Order
           </button>
           <button class="btn-secondary" data-action="REJECTED" data-id="${order.id}" style="color:var(--red); border-color:var(--red); padding:8px 10px; font-size:12px;">
-            ✕
+            Decline
           </button>
         </div>
       `;
@@ -282,7 +291,7 @@ function renderOrderCard(order, showAction = true) {
       actionHtml = `
         <div style="margin-top:12px;">
           <button class="btn-primary" data-action="PREPARING" data-id="${order.id}" style="width:100%; padding:9px 12px; font-size:13px; background:var(--blue);">
-            🍳 Start Preparing
+            Start Cooking
           </button>
         </div>
       `;
@@ -290,7 +299,7 @@ function renderOrderCard(order, showAction = true) {
       actionHtml = `
         <div style="margin-top:12px;">
           <button class="btn-primary" data-action="READY" data-id="${order.id}" style="width:100%; padding:9px 12px; font-size:13px; background:var(--green);">
-            📦 Mark Ready for Pickup
+            Mark Ready for Pickup
           </button>
         </div>
       `;
@@ -304,7 +313,7 @@ function renderOrderCard(order, showAction = true) {
           <div style="font-weight:800; font-size:15px;">Order #${order.id}</div>
           <div style="font-size:12px; color:var(--ink-secondary);">${order.customer_name} · ${order.customer_phone || ''}</div>
         </div>
-        <span class="sla-pill ${slaClass}">⏱ ${elapsed}m ago</span>
+        <span class="sla-pill ${slaClass}">${elapsed}m ago</span>
       </div>
 
       <div style="background:var(--surface-alt); border-radius:var(--radius-sm); padding:10px; margin:8px 0; font-size:13px;">
@@ -323,7 +332,7 @@ function renderOrderCard(order, showAction = true) {
 
       ${order.rider_name ? `
         <div style="margin-top:8px; padding-top:8px; border-top:1px dashed var(--border); font-size:12px; color:var(--ink-secondary);">
-          🛵 Assigned Rider: <strong>${order.rider_name}</strong>
+          Assigned Partner: <strong>${order.rider_name}</strong>
         </div>
       ` : ''}
 
@@ -333,71 +342,53 @@ function renderOrderCard(order, showAction = true) {
 }
 
 async function renderStockModal() {
+  const menu = await API.get(`/api/restaurants/${state.activeRestaurantId}/menu`);
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
     <div class="modal-card" style="max-width:540px;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-        <h3 style="font-size:18px;">📋 Menu Stock & Availability</h3>
-        <button id="closeStockModal" style="background:none; border:none; font-size:20px; cursor:pointer;">✕</button>
-      </div>
-      <p style="font-size:13px; color:var(--ink-secondary); margin-bottom:16px;">
-        Toggle items out of stock when ingredients run out. Changes update the customer app immediately.
-      </p>
-
-      <div id="stockList" style="max-height:360px; overflow-y:auto; padding-right:6px;">
-        <div style="text-align:center; padding:20px;">Loading menu items...</div>
+        <div>
+          <h3 style="margin:0;">Menu Item Stock Control</h3>
+          <p style="margin:4px 0 0; font-size:13px; color:var(--ink-secondary);">Toggle items In-Stock or Sold-Out in real time.</p>
+        </div>
+        <button class="btn-secondary" id="closeStockModal" style="padding:4px 8px; font-size:12px;">✕</button>
       </div>
 
-      <div style="margin-top:16px; text-align:right;">
-        <button class="btn-secondary" id="doneStockModal">Done</button>
+      <div style="max-height:380px; overflow-y:auto; padding-right:4px;">
+        ${menu.map(item => `
+          <div style="display:flex; justify-content:space-between; align-items:center; padding:12px; border-bottom:1px solid var(--border);">
+            <div>
+              <div style="font-weight:700; font-size:14px;">${item.name}</div>
+              <div style="font-size:12px; color:var(--ink-secondary);">₹${item.price} · ${item.category}</div>
+            </div>
+            <button class="btn-secondary toggle-stock-btn" data-id="${item.id}" data-state="${item.is_available}" style="font-size:12px; font-weight:700; padding:6px 12px; ${item.is_available ? 'color:var(--green); border-color:var(--green);' : 'color:var(--red); border-color:var(--red);'}">
+              ${item.is_available ? 'In Stock' : 'Sold Out'}
+            </button>
+          </div>
+        `).join('')}
       </div>
     </div>
   `;
   document.body.appendChild(overlay);
 
-  const close = () => overlay.remove();
-  overlay.querySelector('#closeStockModal').addEventListener('click', close);
-  overlay.querySelector('#doneStockModal').addEventListener('click', close);
+  overlay.querySelector('#closeStockModal').addEventListener('click', () => overlay.remove());
 
-  try {
-    const items = await API.get(`/api/restaurants/${state.activeRestaurantId}/menu`);
-    const listEl = overlay.querySelector('#stockList');
-    listEl.innerHTML = items.map(it => `
-      <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid var(--border);">
-        <div style="display:flex; align-items:center; gap:10px;">
-          <span class="veg-dot ${it.veg ? '' : 'nonveg'}"></span>
-          <div>
-            <div style="font-weight:700; font-size:14px;">${it.name}</div>
-            <div style="font-size:12px; color:var(--ink-secondary);">₹${it.price} · ${it.category || 'General'}</div>
-          </div>
-        </div>
-        <button class="${it.is_available ? 'btn-secondary' : 'btn-primary'}" data-stock-id="${it.id}" style="padding:6px 14px; font-size:12px; ${it.is_available ? '' : 'background:var(--red);'}">
-          ${it.is_available ? 'In Stock (Available)' : 'Sold Out (Off)'}
-        </button>
-      </div>
-    `).join('');
-
-    listEl.querySelectorAll('[data-stock-id]').forEach(b => {
-      b.addEventListener('click', async () => {
-        const id = b.dataset.stockId;
-        b.disabled = true;
-        try {
-          const res = await API.toggleItemStock(id);
-          b.textContent = res.is_available ? 'In Stock (Available)' : 'Sold Out (Off)';
-          b.className = res.is_available ? 'btn-secondary' : 'btn-primary';
-          if (!res.is_available) b.style.background = 'var(--red)';
-          else b.style.background = '';
-          toast(`Updated stock status for item #${id}`, 'info');
-        } catch (e) {
-          toast(e.message, 'error');
-        }
-        b.disabled = false;
-      });
+  overlay.querySelectorAll('.toggle-stock-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.id;
+      try {
+        const res = await API.patch(`/api/menu-items/${id}/toggle`);
+        btn.dataset.state = res.is_available;
+        btn.textContent = res.is_available ? 'In Stock' : 'Sold Out';
+        btn.style.color = res.is_available ? 'var(--green)' : 'var(--red)';
+        btn.style.borderColor = res.is_available ? 'var(--green)' : 'var(--red)';
+        toast(`Updated stock for ${res.name}`, 'info');
+      } catch (err) {
+        toast(err.message, 'error');
+      }
     });
-  } catch (err) {
-    overlay.querySelector('#stockList').innerHTML = `<div style="color:var(--red); text-align:center;">Failed to load items: ${err.message}</div>`;
-  }
+  });
 }
 
 init();

@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>4-in-1 Live Simulator · Foodie Express</title>
+<link rel="icon" type="image/svg+xml" href="icons/icon.svg">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body style="background:#0F172A; color:#fff;">
@@ -12,25 +13,30 @@
   <!-- Showcase Top Action Bar -->
   <div style="background:#1E293B; border:1px solid #334155; border-radius:var(--radius); padding:14px 20px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:16px; margin-bottom:16px;">
     <div style="display:flex; align-items:center; gap:14px;">
-      <div class="brand-icon" style="background:var(--primary); width:40px; height:40px; font-size:22px;">⚡</div>
+      <div class="brand-icon" style="width:38px; height:38px;">
+        <img src="icons/icon.svg" alt="Logo">
+      </div>
       <div>
-        <div style="font-size:18px; font-weight:800; color:#fff;">FOODIE <span style="color:var(--primary);">EXPRESS</span> · Multi-Role Live Showcase</div>
-        <div style="font-size:12px; color:#94A3B8;">4 Synchronized Roles on a Single Screen · Real-time Socket.io State Machine</div>
+        <div style="font-size:18px; font-weight:800; color:#fff;">FOODIE <span style="color:var(--primary);">EXPRESS</span> · Multi-Role Simulator</div>
+        <div style="font-size:12px; color:#94A3B8;">4 Synchronized Roles on a Single Screen · Real-Time Socket.io State Machine</div>
       </div>
     </div>
 
     <!-- Simulator Control -->
     <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
-      <div id="simStatusPill" style="font-size:12px; font-weight:700; background:#334155; color:#E2E8F0; padding:6px 14px; border-radius:999px;">
-        ⚪ Ready for Simulation
+      <div id="simStatusPill" style="font-size:12px; font-weight:700; background:#334155; color:#E2E8F0; padding:6px 14px; border-radius:999px; display:inline-flex; align-items:center; gap:6px;">
+        <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#94A3B8;"></span>
+        Ready for Simulation
       </div>
 
-      <button id="runSimBtn" class="btn-primary" style="box-shadow:0 0 15px rgba(255,82,0,0.5);">
-        ▶ Run 1-Click Auto Simulation
+      <button id="runSimBtn" class="btn-primary" style="box-shadow:0 0 15px rgba(255,82,0,0.5); display:inline-flex; align-items:center; gap:6px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        Run Auto Simulation
       </button>
 
-      <a href="index.html" class="btn-secondary" style="background:#334155; color:#fff; border-color:#475569; font-size:12px; padding:8px 14px;">
-        ⇄ Role Selector
+      <a href="index.html" class="btn-secondary" style="background:#334155; color:#fff; border-color:#475569; font-size:12px; padding:8px 14px; display:inline-flex; align-items:center; gap:6px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+        Role Selector
       </a>
     </div>
   </div>
@@ -41,7 +47,8 @@
     <div class="showcase-panel">
       <div class="showcase-panel-header">
         <span style="display:flex; align-items:center; gap:8px;">
-          <span>🧑‍🍳</span> <strong>Customer App</strong>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          <strong>Customer Portal</strong>
         </span>
         <a href="customer.html" target="_blank" style="font-size:11px; color:var(--primary);">Open Full ↗</a>
       </div>
@@ -52,7 +59,8 @@
     <div class="showcase-panel">
       <div class="showcase-panel-header">
         <span style="display:flex; align-items:center; gap:8px;">
-          <span>🏪</span> <strong>Kitchen Display (KDS)</strong>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          <strong>Kitchen Display (KDS)</strong>
         </span>
         <a href="vendor.html" target="_blank" style="font-size:11px; color:var(--primary);">Open Full ↗</a>
       </div>
@@ -63,7 +71,8 @@
     <div class="showcase-panel">
       <div class="showcase-panel-header">
         <span style="display:flex; align-items:center; gap:8px;">
-          <span>🛵</span> <strong>Rider Partner</strong>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><path d="M15 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2zm-3 5.5l1.5-4.5h3.5l2 4"/><path d="M9 17.5l2-6.5h3.5l1.5 6.5"/></svg>
+          <strong>Delivery Partner</strong>
         </span>
         <a href="rider.html" target="_blank" style="font-size:11px; color:var(--primary);">Open Full ↗</a>
       </div>
@@ -74,7 +83,8 @@
     <div class="showcase-panel">
       <div class="showcase-panel-header">
         <span style="display:flex; align-items:center; gap:8px;">
-          <span>📊</span> <strong>Admin Console</strong>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          <strong>Operations Admin</strong>
         </span>
         <a href="admin.html" target="_blank" style="font-size:11px; color:var(--primary);">Open Full ↗</a>
       </div>
@@ -86,6 +96,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.4/dist/confetti.browser.min.js"></script>
 <script src="/socket.io/socket.io.js"></script>
+<script src="js/icons.js"></script>
 <script src="js/api.js"></script>
 <script src="js/showcase.js"></script>
 </body>

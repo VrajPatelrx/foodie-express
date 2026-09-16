@@ -383,6 +383,33 @@ app.patch('/api/menu-items/:id/toggle', (req, res) => {
   res.json({ success: true, id: item.id, is_available: newAvail });
 });
 
+// ---------- COUPONS & RATINGS ----------
+app.post('/api/coupons/apply', (req, res) => {
+  const { code, subtotal } = req.body;
+  const cleanCode = String(code || '').trim().toUpperCase();
+  const sub = Number(subtotal) || 0;
+  if (cleanCode === 'WELCOME50') {
+    const discount = Math.min(100, Math.round(sub * 0.5));
+    return res.json({ success: true, code: 'WELCOME50', discount, description: '50% off up to ₹100' });
+  }
+  if (cleanCode === 'FREEDEL') {
+    return res.json({ success: true, code: 'FREEDEL', discount: 25, freeDelivery: true, description: 'Free Delivery (₹25 off)' });
+  }
+  if (cleanCode === 'FLAT20') {
+    const discount = Math.min(sub, 20);
+    return res.json({ success: true, code: 'FLAT20', discount, description: 'Flat ₹20 discount' });
+  }
+  return res.status(400).json({ error: 'Invalid coupon code. Try WELCOME50 or FREEDEL.' });
+});
+
+app.post('/api/orders/:id/rate', (req, res) => {
+  const { rating, review } = req.body;
+  const orderId = req.params.id;
+  const numericRating = Math.max(1, Math.min(5, Number(rating) || 5));
+  db.prepare('UPDATE orders SET rating = ?, review_text = ? WHERE id = ?').run(numericRating, String(review || '').trim(), orderId);
+  res.json({ success: true, message: 'Thank you for your feedback!' });
+});
+
 // ---------- ORDERS: CUSTOMER ----------
 app.post('/api/orders', (req, res) => {
   const validation = validateOrderInput(req.body);
@@ -390,7 +417,7 @@ app.post('/api/orders', (req, res) => {
     return res.status(400).json({ error: validation.errors.join(' ') });
   }
 
-  const { customer_name, customer_address, customer_email, restaurant_id, items, payment_method, user_id, dest_lat, dest_lng } = req.body;
+  const { customer_name, customer_address, customer_email, restaurant_id, items, payment_method, user_id, dest_lat, dest_lng, coupon_code, discount_amount } = req.body;
   const cleanPhone = validation.cleanPhone;
 
   const menuItems = db.prepare('SELECT * FROM menu_items WHERE restaurant_id = ?').all(restaurant_id);
@@ -409,19 +436,22 @@ app.post('/api/orders', (req, res) => {
     resolvedItems.push({ menu_item_id: menuItem.id, name: menuItem.name, price: menuItem.price, qty: it.qty });
   }
 
-  const deliveryFee = 25;
-  const total = subtotal + deliveryFee;
+  const isFreeDel = coupon_code && String(coupon_code).toUpperCase() === 'FREEDEL';
+  const deliveryFee = isFreeDel ? 0 : 25;
+  const discount = Math.max(0, Number(discount_amount) || 0);
+  const total = Math.max(0, subtotal + deliveryFee - discount);
   // Generate random 4-digit Delivery OTP (Proof of Delivery)
   const deliveryOtp = String(Math.floor(1000 + Math.random() * 9000));
 
   const insertOrder = db.prepare(`
-    INSERT INTO orders (user_id, customer_name, customer_address, customer_phone, customer_email, dest_lat, dest_lng, restaurant_id, subtotal, delivery_fee, total, payment_method, delivery_otp)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO orders (user_id, customer_name, customer_address, customer_phone, customer_email, dest_lat, dest_lng, restaurant_id, subtotal, delivery_fee, total, payment_method, delivery_otp, coupon_code, discount_amount)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const info = insertOrder.run(
     user_id || null, customer_name.trim(), customer_address.trim(), cleanPhone, customer_email || '', 
     dest_lat || null, dest_lng || null,
-    restaurant_id, subtotal, deliveryFee, total, payment_method || 'UPI', deliveryOtp
+    restaurant_id, subtotal, deliveryFee, total, payment_method || 'UPI', deliveryOtp,
+    coupon_code || null, discount
   );
   const orderId = info.lastInsertRowid;
 
