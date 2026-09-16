@@ -169,7 +169,7 @@ app.post('/api/auth/login', (req, res) => {
   // Self-heal: ensure VENDOR has restaurant_id linked in restaurants table
   if (user.role === 'VENDOR' && (!user.restaurant_id || !db.prepare('SELECT id FROM restaurants WHERE id = ?').get(user.restaurant_id))) {
     const restRes = db.prepare("INSERT INTO restaurants (name, cuisine, rating, eta_minutes, is_open, lat, lng) VALUES (?, 'Pure Veg Kitchen & Snacks', 4.5, 25, 1, 22.5540, 72.9500)")
-      .run(`${user.name}'s Kitchen`);
+      .run(user.name);
     user.restaurant_id = restRes.lastInsertRowid;
     db.prepare('UPDATE users SET restaurant_id = ? WHERE id = ?').run(user.restaurant_id, user.id);
   }
@@ -220,7 +220,7 @@ app.post('/api/auth/register', (req, res) => {
     const restRes = db.prepare(`
       INSERT INTO restaurants (name, cuisine, rating, eta_minutes, is_open, lat, lng)
       VALUES (?, 'Pure Veg Kitchen & Snacks', 4.5, 25, 1, 22.5540, 72.9500)
-    `).run(`${name.trim()}'s Kitchen`);
+    `).run(name.trim());
     restaurantId = restRes.lastInsertRowid;
 
     // Seed default starter pure veg items for the new kitchen
@@ -421,16 +421,127 @@ app.get('/api/restaurants', (req, res) => {
   res.json(restaurants);
 });
 
+app.patch('/api/restaurants/:id', (req, res) => {
+  const restId = req.params.id;
+  const rest = db.prepare('SELECT * FROM restaurants WHERE id = ?').get(restId);
+  if (!rest) return res.status(404).json({ error: 'Restaurant not found' });
+
+  const { name, cuisine, eta_minutes, is_open } = req.body;
+  const newName = name !== undefined ? String(name).trim() : rest.name;
+  const newCuisine = cuisine !== undefined ? String(cuisine).trim() : rest.cuisine;
+  const newEta = eta_minutes !== undefined ? Math.max(10, Math.min(120, Number(eta_minutes) || 30)) : rest.eta_minutes;
+  const newIsOpen = is_open !== undefined ? (is_open ? 1 : 0) : rest.is_open;
+
+  if (!newName) {
+    return res.status(400).json({ error: 'Restaurant name cannot be empty.' });
+  }
+
+  db.prepare(`
+    UPDATE restaurants 
+    SET name = ?, cuisine = ?, eta_minutes = ?, is_open = ?
+    WHERE id = ?
+  `).run(newName, newCuisine, newEta, newIsOpen, restId);
+
+  // Keep vendor user record in sync with edited restaurant name
+  db.prepare("UPDATE users SET name = ? WHERE restaurant_id = ? AND role = 'VENDOR'").run(newName, restId);
+
+  const updated = db.prepare('SELECT * FROM restaurants WHERE id = ?').get(restId);
+  io.emit('restaurants:update');
+  res.json({ success: true, restaurant: updated });
+});
+
 app.get('/api/restaurants/:id/menu', (req, res) => {
   const items = db.prepare('SELECT * FROM menu_items WHERE restaurant_id = ?').all(req.params.id);
   res.json(items);
 });
 
+// Add new dish to restaurant menu
+app.post('/api/restaurants/:id/menu', (req, res) => {
+  const restId = req.params.id;
+  const rest = db.prepare('SELECT id FROM restaurants WHERE id = ?').get(restId);
+  if (!rest) return res.status(404).json({ error: 'Restaurant not found' });
+
+  const { name, category, price, is_available } = req.body;
+  const cleanName = String(name || '').trim();
+  const cleanCategory = String(category || 'Specialties').trim();
+  const numPrice = Number(price);
+
+  if (!cleanName || cleanName.length < 2) {
+    return res.status(400).json({ error: 'Dish name must be at least 2 characters.' });
+  }
+  if (isNaN(numPrice) || numPrice <= 0) {
+    return res.status(400).json({ error: 'Please enter a valid price greater than 0.' });
+  }
+
+  const avail = is_available === 0 ? 0 : 1;
+  const insert = db.prepare(`
+    INSERT INTO menu_items (restaurant_id, name, category, price, veg, is_available)
+    VALUES (?, ?, ?, ?, 1, ?)
+  `);
+  const info = insert.run(restId, cleanName, cleanCategory, numPrice, avail);
+
+  const newItem = {
+    id: info.lastInsertRowid,
+    restaurant_id: Number(restId),
+    name: cleanName,
+    category: cleanCategory,
+    price: numPrice,
+    veg: 1,
+    is_available: avail
+  };
+
+  io.emit('menu:update', { restaurant_id: Number(restId) });
+  io.emit('restaurants:update');
+  res.status(201).json({ success: true, item: newItem });
+});
+
+// Edit existing dish
+app.patch('/api/menu-items/:id', (req, res) => {
+  const item = db.prepare('SELECT * FROM menu_items WHERE id = ?').get(req.params.id);
+  if (!item) return res.status(404).json({ error: 'Dish not found' });
+
+  const { name, category, price, is_available } = req.body;
+  const cleanName = name !== undefined ? String(name).trim() : item.name;
+  const cleanCat = category !== undefined ? String(category).trim() : item.category;
+  const numPrice = price !== undefined ? Number(price) : item.price;
+  const avail = is_available !== undefined ? (is_available ? 1 : 0) : item.is_available;
+
+  if (!cleanName || cleanName.length < 2) {
+    return res.status(400).json({ error: 'Dish name must be at least 2 characters.' });
+  }
+  if (isNaN(numPrice) || numPrice <= 0) {
+    return res.status(400).json({ error: 'Dish price must be greater than 0.' });
+  }
+
+  db.prepare(`
+    UPDATE menu_items
+    SET name = ?, category = ?, price = ?, is_available = ?
+    WHERE id = ?
+  `).run(cleanName, cleanCat, numPrice, avail, item.id);
+
+  const updated = db.prepare('SELECT * FROM menu_items WHERE id = ?').get(item.id);
+  io.emit('menu:update', { restaurant_id: item.restaurant_id });
+  res.json({ success: true, item: updated });
+});
+
+// Delete dish from restaurant menu
+app.delete('/api/menu-items/:id', (req, res) => {
+  const item = db.prepare('SELECT * FROM menu_items WHERE id = ?').get(req.params.id);
+  if (!item) return res.status(404).json({ error: 'Dish not found' });
+
+  db.prepare('DELETE FROM menu_items WHERE id = ?').run(item.id);
+
+  io.emit('menu:update', { restaurant_id: item.restaurant_id });
+  res.json({ success: true, id: item.id, restaurant_id: item.restaurant_id });
+});
+
+// Quick stock toggle
 app.patch('/api/menu-items/:id/toggle', (req, res) => {
   const item = db.prepare('SELECT * FROM menu_items WHERE id = ?').get(req.params.id);
   if (!item) return res.status(404).json({ error: 'Item not found' });
   const newAvail = item.is_available ? 0 : 1;
   db.prepare('UPDATE menu_items SET is_available = ? WHERE id = ?').run(newAvail, item.id);
+  io.emit('menu:update', { restaurant_id: item.restaurant_id });
   res.json({ success: true, id: item.id, is_available: newAvail });
 });
 

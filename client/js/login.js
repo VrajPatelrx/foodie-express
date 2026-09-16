@@ -3,6 +3,29 @@ const tabRegister = document.getElementById('tabRegister');
 const loginForm = document.getElementById('loginForm');
 const registerForm = document.getElementById('registerForm');
 
+const regRoleSelect = document.getElementById('regRole');
+const regNameLabel = document.getElementById('regNameLabel');
+const regNameInput = document.getElementById('regName');
+
+function updateRoleUi() {
+  if (!regRoleSelect || !regNameLabel || !regNameInput) return;
+  const role = regRoleSelect.value;
+  if (role === 'VENDOR') {
+    regNameLabel.textContent = 'Restaurant Name';
+    regNameInput.placeholder = 'e.g. Darbar Mugg Pulav';
+  } else if (role === 'RIDER') {
+    regNameLabel.textContent = 'Rider Full Name';
+    regNameInput.placeholder = 'e.g. Vraj Patel';
+  } else {
+    regNameLabel.textContent = 'Full Name';
+    regNameInput.placeholder = 'e.g. Vraj Patel';
+  }
+}
+
+if (regRoleSelect) {
+  regRoleSelect.addEventListener('change', updateRoleUi);
+}
+
 function switchTab(tab) {
   if (tab === 'login') {
     tabLogin.style.borderBottomColor = 'var(--primary)';
@@ -26,11 +49,13 @@ function switchTab(tab) {
 
     registerForm.style.display = 'block';
     loginForm.style.display = 'none';
+    updateRoleUi();
   }
 }
 
 tabLogin.addEventListener('click', () => switchTab('login'));
 tabRegister.addEventListener('click', () => switchTab('register'));
+updateRoleUi();
 
 function handleSuccessfulAuth(user, token) {
   localStorage.setItem('fe_user', JSON.stringify(user));

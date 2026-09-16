@@ -1,11 +1,11 @@
-const socket = typeof io === 'function' ? io() : { on: () => {}, emit: () => {} };
+const socket = typeof io === 'function' ? io() : { on: () => { }, emit: () => { } };
 const view = document.getElementById('view');
 
 // Read logged-in user
 let currentUser = null;
 try {
   currentUser = JSON.parse(localStorage.getItem('fe_user'));
-} catch (e) {}
+} catch (e) { }
 
 let state = {
   screen: 'browse', // browse | menu | tracking | orders | addresses | profile
@@ -17,9 +17,9 @@ let state = {
   selectedCategory: 'All',
   appliedCoupon: null, // { code, discount, freeDelivery, description }
   paymentMethod: 'UPI',
-  customerName: (currentUser && currentUser.name) || localStorage.getItem('fe_customer_name') || 'Aarav Patel',
+  customerName: (currentUser && currentUser.name) || localStorage.getItem('fe_customer_name') || 'Vraj Patel',
   customerPhone: (currentUser && currentUser.phone) || localStorage.getItem('fe_customer_phone') || '9876543210',
-  customerEmail: (currentUser && currentUser.email) || localStorage.getItem('fe_customer_email') || 'aarav@foodie.com',
+  customerEmail: (currentUser && currentUser.email) || localStorage.getItem('fe_customer_email') || 'vraj@foodie.com',
   customerAddress: localStorage.getItem('fe_customer_address') || 'Flat 402, Sunshine Heights, Anand',
   destCoords: null, // { lat, lng } from GPS
   savedAddresses: [],
@@ -69,7 +69,7 @@ function switchScreen(screen, trackHistory = true) {
     screenHistory.push(state.screen);
   }
   state.screen = screen;
-  
+
   // Sync Desktop Tabs
   document.querySelectorAll('#desktopNav .customer-nav-tab').forEach(tab => {
     tab.classList.toggle('active', tab.dataset.nav === screen);
@@ -147,7 +147,7 @@ async function updateOrderBadges() {
     const uid = currentUser ? currentUser.id : 1;
     const orders = await API.get(`/api/orders?user_id=${uid}&phone=${encodeURIComponent(state.customerPhone)}`);
     state.allOrders = orders;
-    
+
     const activeOrders = orders.filter(o => !['DELIVERED', 'CANCELLED', 'REJECTED'].includes(o.status));
     const activeCount = activeOrders.length;
 
@@ -222,7 +222,7 @@ function updateFloatingCart() {
   }
 }
 
-window.showCartModal = function() {
+window.showCartModal = function () {
   if (cartCount() > 0) {
     openCheckoutModal();
   }
@@ -312,6 +312,30 @@ socket.on('order:update', (order) => {
   } else if (state.screen === 'orders') {
     renderOrders();
   }
+});
+
+// Live Restaurant Profile & Menu Updates
+socket.on('restaurants:update', async () => {
+  try {
+    state.restaurants = await API.get('/api/restaurants');
+    if (state.screen === 'browse') renderBrowse();
+    if (state.screen === 'menu' && state.activeRestaurant) {
+      const updatedRest = state.restaurants.find(r => String(r.id) === String(state.activeRestaurant.id));
+      if (updatedRest) state.activeRestaurant = updatedRest;
+      renderMenu();
+    }
+  } catch (e) { }
+});
+
+socket.on('menu:update', async (data) => {
+  try {
+    if (state.screen === 'menu' && state.activeRestaurant) {
+      if (!data || String(data.restaurant_id) === String(state.activeRestaurant.id)) {
+        state.menu = await API.get(`/api/restaurants/${state.activeRestaurant.id}/menu`);
+        renderMenu();
+      }
+    }
+  } catch (e) { }
 });
 
 // ----------------------------------------------------
@@ -929,7 +953,7 @@ function openCheckoutModal() {
           if (geoSearch.results && geoSearch.results.length > 0) {
             state.destCoords = { lat: geoSearch.results[0].lat, lng: geoSearch.results[0].lng };
           }
-        } catch (e) {}
+        } catch (e) { }
       }
 
       const items = Object.entries(state.cart).map(([menu_item_id, qty]) => ({
@@ -1552,17 +1576,17 @@ function renderTracking(order) {
   const isDelivered = order.status === 'DELIVERED';
   const isCancelled = order.status === 'CANCELLED';
 
-  const isStep1Done = ['ACCEPTED','PREPARING','READY','ASSIGNED','PICKED_UP','OUT_FOR_DELIVERY','DELIVERED'].includes(order.status);
+  const isStep1Done = ['ACCEPTED', 'PREPARING', 'READY', 'ASSIGNED', 'PICKED_UP', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(order.status);
   const isStep1Active = order.status === 'PLACED';
 
-  const isStep2Done = ['READY','ASSIGNED','PICKED_UP','OUT_FOR_DELIVERY','DELIVERED'].includes(order.status);
-  const isStep2Active = ['ACCEPTED','PREPARING'].includes(order.status);
+  const isStep2Done = ['READY', 'ASSIGNED', 'PICKED_UP', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(order.status);
+  const isStep2Active = ['ACCEPTED', 'PREPARING'].includes(order.status);
 
-  const isStep3Done = ['PICKED_UP','OUT_FOR_DELIVERY','DELIVERED'].includes(order.status);
-  const isStep3Active = ['READY','ASSIGNED'].includes(order.status);
+  const isStep3Done = ['PICKED_UP', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(order.status);
+  const isStep3Active = ['READY', 'ASSIGNED'].includes(order.status);
 
   const isStep4Done = order.status === 'DELIVERED';
-  const isStep4Active = ['PICKED_UP','OUT_FOR_DELIVERY'].includes(order.status);
+  const isStep4Active = ['PICKED_UP', 'OUT_FOR_DELIVERY'].includes(order.status);
 
   const isStep5Done = order.status === 'DELIVERED';
 
@@ -1722,7 +1746,7 @@ async function initTrackingMap(order) {
   const destLng = Number(order.dest_lng) || 72.9570;
 
   if (state.mapInstance) {
-    try { state.mapInstance.remove(); } catch (e) {}
+    try { state.mapInstance.remove(); } catch (e) { }
   }
 
   state.mapInstance = L.map('trackingMap', { zoomControl: false }).setView([restLat, restLng], 14);

@@ -160,7 +160,7 @@ try {
   const unlinkedVendors = db.prepare("SELECT id, name FROM users WHERE role = 'VENDOR' AND (restaurant_id IS NULL OR restaurant_id NOT IN (SELECT id FROM restaurants))").all();
   for (const u of unlinkedVendors) {
     const res = db.prepare("INSERT INTO restaurants (name, cuisine, rating, eta_minutes, is_open, lat, lng) VALUES (?, 'Pure Veg Kitchen & Snacks', 4.5, 25, 1, 22.5540, 72.9500)")
-      .run(`${u.name}'s Kitchen`);
+      .run(u.name);
     db.prepare("UPDATE users SET restaurant_id = ? WHERE id = ?").run(res.lastInsertRowid, u.id);
   }
 } catch (e) {

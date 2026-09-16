@@ -76,6 +76,20 @@ socket.on('order:update', async (order) => {
   }
 });
 
+socket.on('restaurants:update', async () => {
+  state.restaurants = await API.get('/api/restaurants');
+  if (state.activeRestaurantId) render();
+});
+
+socket.on('menu:update', async (data) => {
+  if (data && String(data.restaurant_id) === String(state.activeRestaurantId)) {
+    const existingMenuModal = document.getElementById('menuManagerModalOverlay');
+    if (existingMenuModal) {
+      renderMenuModal();
+    }
+  }
+});
+
 async function loadOrders() {
   state.orders = await API.get(`/api/vendor/${state.activeRestaurantId}/orders`);
 }
@@ -132,6 +146,7 @@ function render() {
   document.getElementById('activeRestaurantTag').textContent = r.name;
 
   const groups = groupOrders();
+  const isOnline = Boolean(r.is_open);
 
   view.innerHTML = `
     <!-- Top Action Bar -->
@@ -141,13 +156,29 @@ function render() {
           ${typeof Icons !== 'undefined' ? Icons.kitchen(24) : ''}
         </div>
         <div>
-          <h2 style="font-size:20px; margin:0 0 2px;">${r.name}</h2>
-          <div style="font-size:13px; color:var(--ink-secondary);">Kitchen Display Terminal (KDS) · ${r.cuisine}</div>
+          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+            <h2 style="font-size:20px; margin:0;">${r.name}</h2>
+            <span class="badge ${isOnline ? 'open' : 'closed'}">${isOnline ? 'Open for Orders' : 'Store Paused'}</span>
+          </div>
+          <div style="font-size:13px; color:var(--ink-secondary); margin-top:3px;">
+            ${r.cuisine || 'Pure Veg Kitchen'} · Est. Prep & Delivery: <strong>${r.eta_minutes || 25} mins</strong>
+          </div>
         </div>
       </div>
       <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-        <button class="btn-secondary" id="manageMenuBtn">Item Stock Control</button>
-        <button class="btn-secondary" id="switchRestBtn">Switch Kitchen</button>
+        <button class="btn-secondary" id="kdsDutyToggleBtn" style="font-size:12.5px; padding:7px 12px; display:inline-flex; align-items:center; gap:6px; font-weight:700;">
+          <span style="width:8px; height:8px; border-radius:50%; background:${isOnline ? 'var(--green)' : 'var(--red)'}; display:inline-block;"></span>
+          ${isOnline ? 'Kitchen Online' : 'Kitchen Offline'}
+        </button>
+        <button class="btn-secondary" id="editProfileBtn" style="font-size:12.5px; padding:7px 12px; display:inline-flex; align-items:center; gap:6px; font-weight:600;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          Edit Kitchen
+        </button>
+        <button class="btn-primary" id="manageMenuBtn" style="font-size:12.5px; padding:7px 14px; display:inline-flex; align-items:center; gap:6px; font-weight:700;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Menu & Products
+        </button>
+        <button class="btn-secondary" id="switchRestBtn" style="font-size:12.5px; padding:7px 12px;">Switch Kitchen</button>
       </div>
     </div>
 
@@ -266,7 +297,22 @@ function render() {
     renderPicker();
   });
 
-  document.getElementById('manageMenuBtn').addEventListener('click', renderStockModal);
+  document.getElementById('kdsDutyToggleBtn').addEventListener('click', async () => {
+    try {
+      const btn = document.getElementById('kdsDutyToggleBtn');
+      btn.disabled = true;
+      const nextState = r.is_open ? 0 : 1;
+      await API.patch(`/api/restaurants/${r.id}`, { is_open: nextState });
+      r.is_open = nextState;
+      toast(nextState ? 'Kitchen is now OPEN for customer orders' : 'Kitchen is now PAUSED (Offline)', 'info');
+      render();
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  });
+
+  document.getElementById('editProfileBtn').addEventListener('click', () => renderEditProfileModal(r));
+  document.getElementById('manageMenuBtn').addEventListener('click', () => renderMenuModal());
 
   document.getElementById('toggleHistoryBtn').addEventListener('click', () => {
     state.showHistory = !state.showHistory;
@@ -364,53 +410,315 @@ function renderOrderCard(order, allowAction = true) {
   `;
 }
 
-async function renderStockModal() {
-  const menu = await API.get(`/api/restaurants/${state.activeRestaurantId}/menu`);
+// --- RESTAURANT PROFILE EDITING MODAL ---
+function renderEditProfileModal(restaurant) {
+  const existing = document.getElementById('editProfileModalOverlay');
+  if (existing) existing.remove();
+
   const overlay = document.createElement('div');
+  overlay.id = 'editProfileModalOverlay';
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
-    <div class="modal-card" style="max-width:540px;">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-        <div>
-          <h3 style="margin:0;">Menu Item Stock Control</h3>
-          <p style="margin:4px 0 0; font-size:13px; color:var(--ink-secondary);">Toggle items In-Stock or Sold-Out in real time.</p>
+    <div class="modal-card" style="max-width:480px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:1px solid var(--border); padding-bottom:12px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="color:var(--primary); display:inline-flex;">${typeof Icons !== 'undefined' ? Icons.kitchen(20) : ''}</span>
+          <h3 style="margin:0; font-size:17px;">Edit Kitchen Profile</h3>
         </div>
-        <button class="btn-secondary" id="closeStockModal" style="padding:4px 8px; font-size:12px;">✕</button>
+        <button class="btn-secondary" id="closeEditProfileModal" style="padding:4px 8px; font-size:12px; border-radius:6px;">✕</button>
       </div>
 
-      <div style="max-height:380px; overflow-y:auto; padding-right:4px;">
-        ${menu.map(item => `
-          <div style="display:flex; justify-content:space-between; align-items:center; padding:12px; border-bottom:1px solid var(--border);">
-            <div>
-              <div style="font-weight:700; font-size:14px;">${item.name}</div>
-              <div style="font-size:12px; color:var(--ink-secondary);">₹${item.price} · ${item.category}</div>
-            </div>
-            <button class="btn-secondary toggle-stock-btn" data-id="${item.id}" data-state="${item.is_available}" style="font-size:12px; font-weight:700; padding:6px 12px; ${item.is_available ? 'color:var(--green); border-color:var(--green);' : 'color:var(--red); border-color:var(--red);'}">
-              ${item.is_available ? 'In Stock' : 'Sold Out'}
-            </button>
+      <form id="editProfileForm">
+        <div style="margin-bottom:14px;">
+          <label style="display:block; font-size:13px; font-weight:700; margin-bottom:4px;">Restaurant / Kitchen Name</label>
+          <input type="text" id="editRestName" required value="${restaurant.name || ''}" placeholder="e.g. Darbar Mugg Pulav" style="width:100%; height:40px; padding:0 12px; border-radius:8px; border:1px solid var(--border); box-sizing:border-box; font-size:14px;">
+        </div>
+
+        <div style="margin-bottom:14px;">
+          <label style="display:block; font-size:13px; font-weight:700; margin-bottom:4px;">Cuisine Specialty / Description</label>
+          <input type="text" id="editRestCuisine" required value="${restaurant.cuisine || ''}" placeholder="e.g. Mugg Pulav, Biryani & Snacks" style="width:100%; height:40px; padding:0 12px; border-radius:8px; border:1px solid var(--border); box-sizing:border-box; font-size:14px;">
+        </div>
+
+        <div style="margin-bottom:16px;">
+          <label style="display:block; font-size:13px; font-weight:700; margin-bottom:4px;">Avg. Delivery / Prep ETA (Minutes)</label>
+          <input type="number" id="editRestEta" required min="10" max="120" value="${restaurant.eta_minutes || 25}" style="width:100%; height:40px; padding:0 12px; border-radius:8px; border:1px solid var(--border); box-sizing:border-box; font-size:14px;">
+        </div>
+
+        <div style="margin-bottom:20px; padding:12px; background:var(--surface-alt); border-radius:8px; display:flex; align-items:center; justify-content:space-between;">
+          <div>
+            <div style="font-weight:700; font-size:13px;">Store Status</div>
+            <div style="font-size:12px; color:var(--ink-secondary);">Open to receive new customer orders</div>
           </div>
-        `).join('')}
+          <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-weight:700; font-size:13px;">
+            <input type="checkbox" id="editRestIsOpen" ${restaurant.is_open ? 'checked' : ''} style="width:16px; height:16px; accent-color:var(--primary);">
+            <span>Open</span>
+          </label>
+        </div>
+
+        <div style="display:flex; gap:10px; justify-content:flex-end;">
+          <button type="button" class="btn-secondary" id="cancelEditProfileBtn" style="padding:9px 16px; font-size:13px;">Cancel</button>
+          <button type="submit" class="btn-primary" id="saveProfileBtn" style="padding:9px 20px; font-size:13px; font-weight:700;">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const closeModal = () => overlay.remove();
+  overlay.querySelector('#closeEditProfileModal').addEventListener('click', closeModal);
+  overlay.querySelector('#cancelEditProfileBtn').addEventListener('click', closeModal);
+
+  overlay.querySelector('#editProfileForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const saveBtn = overlay.querySelector('#saveProfileBtn');
+    const name = overlay.querySelector('#editRestName').value.trim();
+    const cuisine = overlay.querySelector('#editRestCuisine').value.trim();
+    const eta_minutes = Number(overlay.querySelector('#editRestEta').value);
+    const is_open = overlay.querySelector('#editRestIsOpen').checked ? 1 : 0;
+
+    try {
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving...';
+      const res = await API.patch(`/api/restaurants/${restaurant.id}`, { name, cuisine, eta_minutes, is_open });
+      toast('Restaurant profile updated successfully!', 'success');
+      closeModal();
+      // Update state and refresh
+      state.restaurants = await API.get('/api/restaurants');
+      render();
+    } catch (err) {
+      toast(err.message, 'error');
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save Changes';
+    }
+  });
+}
+
+// --- FULL MENU & PRODUCT MANAGEMENT MODAL ---
+async function renderMenuModal() {
+  const existing = document.getElementById('menuManagerModalOverlay');
+  if (existing) existing.remove();
+
+  const menu = await API.get(`/api/restaurants/${state.activeRestaurantId}/menu`);
+  const overlay = document.createElement('div');
+  overlay.id = 'menuManagerModalOverlay';
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-card" style="max-width:620px; width:100%;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; border-bottom:1px solid var(--border); padding-bottom:12px; gap:10px;">
+        <div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <h3 style="margin:0; font-size:18px;">Menu & Product Manager</h3>
+            <span style="font-size:12px; color:var(--ink-secondary); background:var(--surface-alt); padding:2px 8px; border-radius:999px; font-weight:700;">${menu.length} Dishes</span>
+          </div>
+          <p style="margin:3px 0 0; font-size:12.5px; color:var(--ink-secondary);">Add new dishes, modify prices, update details, or toggle stock.</p>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <button class="btn-primary" id="openAddDishBtn" style="padding:6px 14px; font-size:12.5px; font-weight:700; display:inline-flex; align-items:center; gap:5px; white-space:nowrap;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Add New Dish
+          </button>
+          <button class="btn-secondary" id="closeMenuManagerModal" style="padding:4px 8px; font-size:12px; border-radius:6px;">✕</button>
+        </div>
+      </div>
+
+      <div style="max-height:420px; overflow-y:auto; padding-right:4px;" id="menuProductListContainer">
+        ${menu.length ? menu.map(item => `
+          <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 10px; border-bottom:1px solid var(--border); gap:12px; flex-wrap:wrap;">
+            <div style="display:flex; align-items:center; gap:10px; flex:1; min-width:180px;">
+              <span style="display:inline-flex; flex-shrink:0;">${typeof Icons !== 'undefined' ? Icons.veg(15) : ''}</span>
+              <div>
+                <div style="font-weight:700; font-size:14px; color:var(--ink);">${item.name}</div>
+                <div style="font-size:12px; color:var(--ink-secondary); display:flex; align-items:center; gap:6px; margin-top:2px;">
+                  <strong style="color:var(--ink); font-size:13px;">₹${item.price}</strong>
+                  <span>•</span>
+                  <span style="background:var(--surface-alt); padding:1px 6px; border-radius:4px; font-size:11px;">${item.category || 'General'}</span>
+                </div>
+              </div>
+            </div>
+
+            <div style="display:flex; align-items:center; gap:8px;">
+              <!-- Quick Stock Toggle -->
+              <button class="btn-secondary toggle-stock-btn" data-id="${item.id}" data-state="${item.is_available}" style="font-size:11.5px; font-weight:700; padding:5px 10px; border-radius:6px; ${item.is_available ? 'color:var(--green); border-color:var(--green);' : 'color:var(--red); border-color:var(--red);'}">
+                ${item.is_available ? 'In Stock' : 'Sold Out'}
+              </button>
+
+              <!-- Edit Dish -->
+              <button class="btn-secondary edit-dish-btn" data-id="${item.id}" style="font-size:11.5px; padding:5px 10px; border-radius:6px; display:inline-flex; align-items:center; gap:4px;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                Edit
+              </button>
+
+              <!-- Delete Dish -->
+              <button class="btn-secondary delete-dish-btn" data-id="${item.id}" data-name="${item.name}" style="font-size:11.5px; padding:5px 10px; border-radius:6px; color:var(--red); border-color:var(--red); display:inline-flex; align-items:center; gap:4px;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                Delete
+              </button>
+            </div>
+          </div>
+        `).join('') : `
+          <div style="text-align:center; padding:40px 10px; color:var(--ink-secondary); font-size:13.5px;">
+            No dishes found on this menu.<br>Click <strong>"+ Add New Dish"</strong> above to add your first pure veg item!
+          </div>
+        `}
       </div>
     </div>
   `;
   document.body.appendChild(overlay);
 
-  overlay.querySelector('#closeStockModal').addEventListener('click', () => overlay.remove());
+  overlay.querySelector('#closeMenuManagerModal').addEventListener('click', () => overlay.remove());
 
+  // Wire Add Dish button
+  overlay.querySelector('#openAddDishBtn').addEventListener('click', () => {
+    renderDishFormModal(null, async () => {
+      await renderMenuModal();
+    });
+  });
+
+  // Wire Stock Toggle buttons
   overlay.querySelectorAll('.toggle-stock-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
       const id = btn.dataset.id;
       try {
+        btn.disabled = true;
         const res = await API.patch(`/api/menu-items/${id}/toggle`);
         btn.dataset.state = res.is_available;
         btn.textContent = res.is_available ? 'In Stock' : 'Sold Out';
         btn.style.color = res.is_available ? 'var(--green)' : 'var(--red)';
         btn.style.borderColor = res.is_available ? 'var(--green)' : 'var(--red)';
-        toast(`Updated stock for ${res.name}`, 'info');
+        btn.disabled = false;
+        toast(`Stock updated: ${res.is_available ? 'In Stock' : 'Sold Out'}`, 'info');
       } catch (err) {
         toast(err.message, 'error');
+        btn.disabled = false;
       }
     });
+  });
+
+  // Wire Edit buttons
+  overlay.querySelectorAll('.edit-dish-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const item = menu.find(m => String(m.id) === String(btn.dataset.id));
+      if (item) {
+        renderDishFormModal(item, async () => {
+          await renderMenuModal();
+        });
+      }
+    });
+  });
+
+  // Wire Delete buttons
+  overlay.querySelectorAll('.delete-dish-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.id;
+      const name = btn.dataset.name;
+      if (!confirm(`Are you sure you want to permanently delete "${name}" from the menu?`)) return;
+
+      try {
+        btn.disabled = true;
+        await API.delete(`/api/menu-items/${id}`);
+        toast(`Removed "${name}" from menu`, 'info');
+        await renderMenuModal();
+      } catch (err) {
+        toast(err.message, 'error');
+        btn.disabled = false;
+      }
+    });
+  });
+}
+
+// --- ADD / EDIT DISH FORM MODAL ---
+function renderDishFormModal(existingItem = null, onSuccess = () => {}) {
+  const isEdit = Boolean(existingItem);
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.style.zIndex = '11000'; // Layer above menu manager modal
+  overlay.innerHTML = `
+    <div class="modal-card" style="max-width:440px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; border-bottom:1px solid var(--border); padding-bottom:10px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="display:inline-flex;">${typeof Icons !== 'undefined' ? Icons.veg(16) : ''}</span>
+          <h3 style="margin:0; font-size:16px;">${isEdit ? 'Edit Dish Details' : 'Add New Pure Veg Dish'}</h3>
+        </div>
+        <button class="btn-secondary" id="closeDishFormModal" style="padding:4px 8px; font-size:12px; border-radius:6px;">✕</button>
+      </div>
+
+      <form id="dishForm">
+        <div style="margin-bottom:12px;">
+          <label style="display:block; font-size:13px; font-weight:700; margin-bottom:4px;">Dish Name</label>
+          <input type="text" id="dishName" required value="${isEdit ? existingItem.name : ''}" placeholder="e.g. Special Mugg Pulav Bowl" style="width:100%; height:38px; padding:0 12px; border-radius:8px; border:1px solid var(--border); box-sizing:border-box; font-size:13.5px;">
+        </div>
+
+        <div style="margin-bottom:12px;">
+          <label style="display:block; font-size:13px; font-weight:700; margin-bottom:4px;">Category</label>
+          <input type="text" id="dishCategory" list="dishCategoryList" required value="${isEdit ? (existingItem.category || 'Meals') : 'Meals'}" placeholder="e.g. Pulav, Meals, Snacks" style="width:100%; height:38px; padding:0 12px; border-radius:8px; border:1px solid var(--border); box-sizing:border-box; font-size:13.5px;">
+          <datalist id="dishCategoryList">
+            <option value="Pulav & Biryani">
+            <option value="Meals & Thali">
+            <option value="Snacks">
+            <option value="Fast Food">
+            <option value="Starters">
+            <option value="Combos">
+            <option value="Beverages">
+            <option value="Desserts">
+          </datalist>
+        </div>
+
+        <div style="margin-bottom:14px;">
+          <label style="display:block; font-size:13px; font-weight:700; margin-bottom:4px;">Price (₹)</label>
+          <input type="number" id="dishPrice" required min="1" step="1" value="${isEdit ? existingItem.price : ''}" placeholder="e.g. 140" style="width:100%; height:38px; padding:0 12px; border-radius:8px; border:1px solid var(--border); box-sizing:border-box; font-size:13.5px;">
+        </div>
+
+        <div style="margin-bottom:16px; padding:10px; background:var(--surface-alt); border-radius:8px; display:flex; align-items:center; justify-content:space-between;">
+          <div>
+            <div style="font-weight:700; font-size:12.5px;">Availability</div>
+            <div style="font-size:11.5px; color:var(--ink-secondary);">Available for immediate orders</div>
+          </div>
+          <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-weight:700; font-size:12.5px;">
+            <input type="checkbox" id="dishAvailable" ${!isEdit || existingItem.is_available ? 'checked' : ''} style="width:16px; height:16px; accent-color:var(--primary);">
+            <span>In Stock</span>
+          </label>
+        </div>
+
+        <div style="display:flex; gap:10px; justify-content:flex-end;">
+          <button type="button" class="btn-secondary" id="cancelDishFormBtn" style="padding:8px 14px; font-size:12.5px;">Cancel</button>
+          <button type="submit" class="btn-primary" id="saveDishSubmitBtn" style="padding:8px 18px; font-size:12.5px; font-weight:700;">${isEdit ? 'Save Changes' : 'Add Dish'}</button>
+        </div>
+      </form>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const closeForm = () => overlay.remove();
+  overlay.querySelector('#closeDishFormModal').addEventListener('click', closeForm);
+  overlay.querySelector('#cancelDishFormBtn').addEventListener('click', closeForm);
+
+  overlay.querySelector('#dishForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = overlay.querySelector('#saveDishSubmitBtn');
+    const name = overlay.querySelector('#dishName').value.trim();
+    const category = overlay.querySelector('#dishCategory').value.trim();
+    const price = Number(overlay.querySelector('#dishPrice').value);
+    const is_available = overlay.querySelector('#dishAvailable').checked ? 1 : 0;
+
+    try {
+      btn.disabled = true;
+      btn.textContent = 'Saving...';
+
+      if (isEdit) {
+        await API.patch(`/api/menu-items/${existingItem.id}`, { name, category, price, is_available });
+        toast(`Updated "${name}" successfully!`, 'success');
+      } else {
+        await API.post(`/api/restaurants/${state.activeRestaurantId}/menu`, { name, category, price, is_available });
+        toast(`Added "${name}" to your menu!`, 'success');
+      }
+
+      closeForm();
+      onSuccess();
+    } catch (err) {
+      toast(err.message, 'error');
+      btn.disabled = false;
+      btn.textContent = isEdit ? 'Save Changes' : 'Add Dish';
+    }
   });
 }
 
