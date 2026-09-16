@@ -51,22 +51,14 @@ Make sure you have [Node.js](https://nodejs.org/) (version 18 or higher) install
 
 ---
 
-### 2. Clone the Repository
-```bash
-git clone https://github.com/<your-username>/foodie-express.git
-cd foodie-express
-```
-
----
-
-### 3. Install Dependencies
+### 2. Install Dependencies
 ```bash
 npm install
 ```
 
 ---
 
-### 4. Start the Application
+### 3. Start the Application
 
 #### Option A: On Windows (Quick 1-Click)
 > Simply double-click **`start.bat`** in the project folder.
@@ -78,7 +70,7 @@ npm start
 
 ---
 
-### 5. Open in Your Browser
+### 4. Open in Your Browser
 Once the terminal displays `Foodie Express running -> http://localhost:3000`, open:
 👉 **[http://localhost:3000](http://localhost:3000)**
 
