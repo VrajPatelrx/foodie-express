@@ -27,6 +27,9 @@
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
         Mobile Access
       </button>
+      <button id="adminSignOutBtn" class="btn-secondary" style="padding:6px 14px; font-size:12px; height:32px; border-radius:999px; display:inline-flex; align-items:center; gap:6px;">
+        Sign Out
+      </button>
       <a class="btn-secondary hide-mobile" href="index.html" style="padding:6px 14px; font-size:12px; display:inline-flex; align-items:center; gap:6px; height:32px; border-radius:999px;">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
         Switch Role
@@ -46,8 +49,8 @@
   function openPhoneModal() {
     fetch('/api/network-info').then(r => r.json()).then(net => {
       let currentRole = 'customer';
-      let useHttps = true;
-      const staticBase = 'https://divina-nondiscordant-malissa.ngrok-free.dev';
+      const staticBase = net.tunnelUrl || (window.location.protocol === 'https:' ? window.location.origin : '');
+      let useHttps = Boolean(staticBase);
       const rolePaths = {
         customer: '/customer.html',
         kitchen: '/vendor.html',
@@ -115,7 +118,14 @@
 
         overlay.querySelector('#closePhoneModal').addEventListener('click', () => overlay.remove());
         overlay.querySelector('#closePhoneModalBtn').addEventListener('click', () => overlay.remove());
-        overlay.querySelector('#toggleHttpsBtn').addEventListener('click', () => { useHttps = true; renderContent(); });
+        overlay.querySelector('#toggleHttpsBtn').addEventListener('click', () => { 
+          if (!staticBase) {
+            alert('To enable HTTPS Tunnel, set NGROK_DOMAIN or TUNNEL_URL in your private .env file and run tunnel.bat.');
+            return;
+          }
+          useHttps = true; 
+          renderContent(); 
+        });
         overlay.querySelector('#toggleWifiBtn').addEventListener('click', () => { useHttps = false; renderContent(); });
         overlay.querySelectorAll('.pill-role-btn').forEach(btn => {
           btn.addEventListener('click', () => {

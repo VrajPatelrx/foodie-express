@@ -1,15 +1,30 @@
 # Dependencies
 node_modules/
 
-# SQLite runtime files & locks
+# Environment and Secrets (CRITICAL: Never commit private credentials)
+.env
+.env.local
+.env.*.local
+*.env
+
+# SQLite runtime files, databases & locks (Avoid leaking user records)
+database/*.db
 database/*.db-shm
 database/*.db-wal
 
+# Large binaries and executables (Keep repository lightweight and private)
+scripts/*.exe
+scripts/ngrok.exe
+*.exe
+
 # Log files
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Environment & OS files
+# Editor & OS files
 .DS_Store
 Thumbs.db
+.vscode/
+.idea/

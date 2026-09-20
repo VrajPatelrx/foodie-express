@@ -10,11 +10,25 @@ function setStatus(text, bg = '#334155', color = '#E2E8F0') {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+async function ensureSimulatorAuth() {
+  const token = localStorage.getItem('fe_token');
+  if (token) return;
+  try {
+    const res = await API.post('/api/auth/login', { demoRole: 'ADMIN' });
+    if (res && res.token) {
+      localStorage.setItem('fe_token', res.token);
+      localStorage.setItem('fe_user', JSON.stringify(res.user));
+    }
+  } catch (e) {}
+}
+
 async function runAutoSimulation() {
   simBtn.disabled = true;
   simBtn.style.opacity = '0.5';
 
   try {
+    await ensureSimulatorAuth();
+
     // 1. Fetch restaurants to place order from
     const restaurants = await API.get('/api/restaurants');
     const rest = restaurants[0] || { id: 1 };

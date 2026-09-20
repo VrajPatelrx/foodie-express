@@ -1,6 +1,20 @@
 const socket = typeof io === 'function' ? io() : { on: () => {}, emit: () => {} };
 const view = document.getElementById('view');
 
+let currentUser = null;
+try {
+  currentUser = JSON.parse(localStorage.getItem('fe_user'));
+} catch (e) {}
+
+const adminSignOutBtn = document.getElementById('adminSignOutBtn');
+if (adminSignOutBtn) {
+  adminSignOutBtn.addEventListener('click', () => {
+    localStorage.removeItem('fe_user');
+    localStorage.removeItem('fe_token');
+    window.location.href = 'login.html';
+  });
+}
+
 let state = {
   overview: null,
   orders: [],
@@ -8,7 +22,48 @@ let state = {
   statusFilter: 'ALL',
 };
 
+function renderAccessRestricted() {
+  view.innerHTML = `
+    <div style="max-width:460px; margin:60px auto; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:32px 24px; text-align:center; box-shadow:var(--shadow-sm);">
+      <div style="width:56px; height:56px; border-radius:50%; background:rgba(239,68,68,0.12); color:#EF4444; display:inline-flex; align-items:center; justify-content:center; margin-bottom:16px;">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      </div>
+      <h2 style="font-size:20px; font-weight:800; margin:0 0 8px; color:var(--ink);">Admin Access Restricted</h2>
+      <p style="font-size:13px; color:var(--ink-secondary); margin:0 0 20px; line-height:1.5;">
+        Platform revenue analytics, financial logs, and fleet dispatch controls are protected by security authentication.
+      </p>
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <button id="quickAdminLoginBtn" class="btn-primary" style="width:100%; padding:10px; font-size:13px; font-weight:700;">
+          1-Click Log In as Platform Admin
+        </button>
+        <a href="login.html" class="btn-secondary" style="width:100%; text-align:center; padding:10px; font-size:13px; text-decoration:none;">
+          Go to Standard Login Page
+        </a>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('quickAdminLoginBtn')?.addEventListener('click', async () => {
+    try {
+      const res = await API.post('/api/auth/login', { demoRole: 'ADMIN' });
+      localStorage.setItem('fe_token', res.token);
+      localStorage.setItem('fe_user', JSON.stringify(res.user));
+      currentUser = res.user;
+      toast('Authenticated as Platform Admin', 'success');
+      await loadAll();
+      render();
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  });
+}
+
 async function loadAll() {
+  if (!localStorage.getItem('fe_token') || (currentUser && currentUser.role !== 'ADMIN')) {
+    renderAccessRestricted();
+    return;
+  }
+
   try {
     const [overview, orders] = await Promise.all([
       API.get('/api/admin/overview'),
@@ -17,6 +72,10 @@ async function loadAll() {
     state.overview = overview;
     state.orders = orders;
   } catch (err) {
+    if (err.message && (err.message.includes('401') || err.message.includes('sign in') || err.message.includes('Access denied') || err.message.includes('Forbidden'))) {
+      renderAccessRestricted();
+      return;
+    }
     console.error('Failed to load admin data:', err);
     renderErrorScreen(view, {
       title: "Admin Analytics Standby",
@@ -32,13 +91,17 @@ async function loadAll() {
 }
 
 socket.on('order:update', async () => {
-  await loadAll();
-  render();
+  if (state.overview) {
+    await loadAll();
+    render();
+  }
 });
 
 socket.on('riders:update', async () => {
-  await loadAll();
-  render();
+  if (state.overview) {
+    await loadAll();
+    render();
+  }
 });
 
 function render() {

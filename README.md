@@ -78,12 +78,26 @@ Once the server is running, open:
 
 ---
 
+### 5. Environment Configuration (.env)
+Foodie Express automatically loads settings from your private `.env` file:
+```bash
+# Copy template to .env (already created for you)
+cp .env.example .env
+```
+Key configuration parameters:
+- `PORT`: Web server port (default `3000`)
+- `JWT_SECRET`: Secret key used for cryptographic session signature verification
+- `PASSWORD_SALT`: Custom salt used for secure credential hashing
+- `NGROK_DOMAIN` / `TUNNEL_URL`: Optional private ngrok permanent domain for mobile testing (kept 100% private and excluded from git)
+
+---
+
 ### Optional: Mobile Testing (HTTPS Tunnel)
 To test the application on a mobile device with GPS location:
 
 1. Keep the server running (`npm start`).
 2. Double-click **`tunnel.bat`** (or run `npm run tunnel`).
-3. Open the generated HTTPS URL on your mobile phone browser.
+3. Open the generated HTTPS URL on your mobile phone browser or scan the QR code from the landing page.
 
 ---
 

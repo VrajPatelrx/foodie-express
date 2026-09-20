@@ -140,13 +140,13 @@
   // Open on Phone QR Code Modal Handler
   function openPhoneModal() {
     fetch('/api/network-info').then(r => r.json()).then(net => {
-      let useHttps = true;
-      const staticDomain = 'https://divina-nondiscordant-malissa.ngrok-free.dev';
+      const tunnelAddress = net.tunnelUrl || (window.location.protocol === 'https:' ? window.location.origin : '');
+      let useHttps = Boolean(tunnelAddress);
       const overlay = document.createElement('div');
       overlay.className = 'modal-overlay';
 
       function render() {
-        const activeUrl = useHttps ? staticDomain : net.localUrl;
+        const activeUrl = (useHttps && tunnelAddress) ? tunnelAddress : net.localUrl;
         overlay.innerHTML = `
           <div class="modal-card" style="max-width:440px; text-align:center;">
             <div style="width:48px; height:48px; border-radius:12px; background:var(--primary-soft); color:var(--primary); display:inline-flex; align-items:center; justify-content:center; margin-bottom:12px;">
@@ -159,7 +159,7 @@
 
             <div style="display:flex; justify-content:center; gap:8px; margin-bottom:14px;">
               <button class="btn-secondary" id="toggleHttpsBtn" style="padding:6px 14px; font-size:12px; border-radius:999px; ${useHttps ? 'background:var(--primary); color:#fff; border-color:var(--primary); font-weight:700;' : ''}">
-                HTTPS Tunnel
+                HTTPS Tunnel ${tunnelAddress ? '' : '(Not Configured)'}
               </button>
               <button class="btn-secondary" id="toggleWifiBtn" style="padding:6px 14px; font-size:12px; border-radius:999px; ${!useHttps ? 'background:var(--primary); color:#fff; border-color:var(--primary); font-weight:700;' : ''}">
                 Local Wi-Fi
@@ -172,7 +172,7 @@
 
             <div style="background:var(--surface-alt); padding:10px 14px; border-radius:var(--radius-sm); border:1px solid var(--border); font-size:13px; margin-bottom:14px; word-break:break-all;">
               <div style="font-size:11px; font-weight:700; color:var(--ink-secondary); text-transform:uppercase; margin-bottom:2px;">
-                ${useHttps ? 'Public Secure Address' : 'Local Network Address'}
+                ${useHttps && tunnelAddress ? 'Public Secure Address' : 'Local Network Address'}
               </div>
               <code style="font-weight:800; font-size:13px; color:var(--primary);">${activeUrl}</code>
             </div>
@@ -182,14 +182,21 @@
         `;
 
         overlay.querySelector('#closePhoneModal').addEventListener('click', () => overlay.remove());
-        overlay.querySelector('#toggleHttpsBtn').addEventListener('click', () => { useHttps = true; render(); });
+        overlay.querySelector('#toggleHttpsBtn').addEventListener('click', () => { 
+          if (!tunnelAddress) {
+            alert('To enable HTTPS Tunnel, set NGROK_DOMAIN or TUNNEL_URL in your private .env file and run tunnel.bat.');
+            return;
+          }
+          useHttps = true; 
+          render(); 
+        });
         overlay.querySelector('#toggleWifiBtn').addEventListener('click', () => { useHttps = false; render(); });
       }
 
       render();
       document.body.appendChild(overlay);
     }).catch(err => {
-      alert('Could not fetch network IP: ' + err.message);
+      alert('Could not fetch network info: ' + err.message);
     });
   }
 

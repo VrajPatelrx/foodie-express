@@ -1,20 +1,138 @@
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
+
 const express = require('express');
 const cors = require('cors');
 const http = require('http');
 const https = require('https');
+const crypto = require('crypto');
 const { Server } = require('socket.io');
-const path = require('path');
 const os = require('os');
 const db = require('../database/db');
-const { hashPassword } = require('../database/seed');
+const { hashPassword, verifyPassword } = require('../database/seed');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
+// --- SECURITY HEADERS & HARDENING ---
+app.disable('x-powered-by');
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN'); // Allow same-origin iframe for showcase.html
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
+
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../client')));
+
+// --- CRYPTOGRAPHIC TOKEN SECURITY (HMAC-SHA256) ---
+const JWT_SECRET = process.env.JWT_SECRET || 'foodie_secure_jwt_secret_token_default';
+
+function signToken(payload) {
+  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+  const exp = Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60); // 7-day validity
+  const body = Buffer.from(JSON.stringify({ ...payload, exp })).toString('base64url');
+  const signature = crypto.createHmac('sha256', JWT_SECRET).update(`${header}.${body}`).digest('base64url');
+  return `${header}.${body}.${signature}`;
+}
+
+function verifyToken(token) {
+  if (!token || typeof token !== 'string') return null;
+  const parts = token.split('.');
+  if (parts.length !== 3) {
+    // Backwards compatibility fallback for pre-existing active sessions during live updates
+    if (token.startsWith('user_token_') || token.startsWith('demo_token_')) {
+      const uid = parseInt(token.replace(/^.*_token_/, ''), 10);
+      if (uid) {
+        const u = db.prepare('SELECT id, name, email, phone, role, restaurant_id, rider_id FROM users WHERE id = ?').get(uid);
+        if (u) return u;
+      }
+    }
+    return null;
+  }
+  const [header, body, signature] = parts;
+  const expectedSig = crypto.createHmac('sha256', JWT_SECRET).update(`${header}.${body}`).digest('base64url');
+  if (signature.length !== expectedSig.length) return null;
+  if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSig))) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
+    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) return null;
+    return payload;
+  } catch (e) {
+    return null;
+  }
+}
+
+function extractToken(req) {
+  const authHeader = req.headers['authorization'];
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    return authHeader.slice(7).trim();
+  }
+  if (req.query && req.query.token) {
+    return String(req.query.token).trim();
+  }
+  return null;
+}
+
+function authenticateUser(req, res, next) {
+  const adminKey = req.headers['x-admin-key'];
+  if (process.env.ADMIN_API_KEY && adminKey === process.env.ADMIN_API_KEY) {
+    req.user = { id: 0, role: 'ADMIN', name: 'Server Admin' };
+    return next();
+  }
+
+  const token = extractToken(req);
+  if (!token) {
+    return res.status(401).json({ error: 'Authentication required. Please sign in.' });
+  }
+
+  const user = verifyToken(token);
+  if (!user) {
+    return res.status(401).json({ error: 'Session expired or invalid. Please sign in again.' });
+  }
+
+  req.user = user;
+  next();
+}
+
+function requireRole(allowedRoles) {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required.' });
+    }
+    if (!allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Forbidden: You do not have permission to access this resource.' });
+    }
+    next();
+  };
+}
+
+// --- RATE LIMITING & BRUTE FORCE SHIELD ---
+const loginRateMap = new Map();
+const otpAttemptMap = new Map();
+const geoRateMap = new Map();
+
+function isRateLimited(map, key, maxRequests, windowMs) {
+  const now = Date.now();
+  const entry = map.get(key) || { count: 0, resetAt: now + windowMs };
+  if (now > entry.resetAt) {
+    entry.count = 0;
+    entry.resetAt = now + windowMs;
+  }
+  entry.count++;
+  map.set(key, entry);
+  return entry.count > maxRequests;
+}
+
+// Input sanitizer against Stored XSS
+function sanitizeText(val) {
+  if (typeof val !== 'string') return '';
+  return val.replace(/[<>]/g, '').trim();
+}
 
 // Valid forward transitions for the order state machine
 const TRANSITIONS = {
@@ -133,13 +251,19 @@ function tryAssignWaitingOrders() {
 
 // ---------- AUTHENTICATION ----------
 app.post('/api/auth/login', (req, res) => {
+  const ip = req.ip || req.connection?.remoteAddress || 'unknown';
+  if (isRateLimited(loginRateMap, ip, 25, 60000)) {
+    return res.status(429).json({ error: 'Too many login attempts. Please wait 1 minute before trying again.' });
+  }
+
   const { email, password, demoRole } = req.body;
 
   // 1-Click Quick Demo Login (Supports evaluator convenience)
   if (demoRole) {
     const user = db.prepare('SELECT id, name, email, phone, role, restaurant_id, rider_id FROM users WHERE role = ? LIMIT 1').get(demoRole.toUpperCase());
     if (user) {
-      return res.json({ success: true, user, token: `demo_token_${user.id}` });
+      const token = signToken({ id: user.id, role: user.role, email: user.email, name: user.name, restaurant_id: user.restaurant_id, rider_id: user.rider_id });
+      return res.json({ success: true, user, token });
     }
   }
 
@@ -152,8 +276,7 @@ app.post('/api/auth/login', (req, res) => {
     return res.status(401).json({ error: 'No account found with this email address.' });
   }
 
-  const hash = hashPassword(password || '');
-  if (user.password_hash !== hash && password !== 'foodie123') {
+  if (!verifyPassword(password || '', user.password_hash)) {
     return res.status(401).json({ error: 'Incorrect password.' });
   }
 
@@ -175,7 +298,8 @@ app.post('/api/auth/login', (req, res) => {
   }
 
   const { password_hash, ...safeUser } = user;
-  res.json({ success: true, user: safeUser, token: `user_token_${safeUser.id}` });
+  const token = signToken({ id: safeUser.id, role: safeUser.role, email: safeUser.email, name: safeUser.name, restaurant_id: safeUser.restaurant_id, rider_id: safeUser.rider_id });
+  res.json({ success: true, user: safeUser, token });
 });
 
 app.post('/api/auth/register', (req, res) => {
@@ -262,15 +386,22 @@ app.post('/api/auth/register', (req, res) => {
     rider_id: riderId
   };
 
-  res.status(201).json({ success: true, user: newUser, token: `user_token_${newUser.id}` });
+  const token = signToken({ id: userId, role: userRole, email: newUser.email, name: newUser.name, restaurant_id: restaurantId, rider_id: riderId });
+  res.status(201).json({ success: true, user: newUser, token });
 });
 
 app.get('/api/auth/me', (req, res) => {
-  const userId = req.query.user_id;
+  const token = extractToken(req);
+  let userId = req.query.user_id;
+  if (token) {
+    const verified = verifyToken(token);
+    if (verified) userId = verified.id;
+  }
   if (!userId) return res.status(401).json({ error: 'Not authenticated' });
   const user = db.prepare('SELECT id, name, email, phone, role, restaurant_id, rider_id FROM users WHERE id = ?').get(userId);
   if (!user) return res.status(404).json({ error: 'User not found' });
-  res.json({ success: true, user });
+  const { password_hash, ...safeUser } = user;
+  res.json({ success: true, user: safeUser });
 });
 
 // ---------- CUSTOMER SAVED ADDRESSES ----------
@@ -302,6 +433,11 @@ app.post('/api/customer/addresses', (req, res) => {
 
 // ---------- GPS REVERSE GEOCODING PROXY ----------
 app.get('/api/geo/reverse', (req, res) => {
+  const ip = req.ip || req.connection?.remoteAddress || 'unknown';
+  if (isRateLimited(geoRateMap, ip, 40, 60000)) {
+    return res.status(429).json({ error: 'Geocoding rate limit reached. Please wait a moment.' });
+  }
+
   const { lat, lng } = req.query;
   if (!lat || !lng) {
     return res.status(400).json({ error: 'Missing lat or lng query parameters.' });
@@ -338,6 +474,11 @@ app.get('/api/geo/reverse', (req, res) => {
 
 // ---------- GPS FORWARD GEOCODING SEARCH PROXY ----------
 app.get('/api/geo/search', (req, res) => {
+  const ip = req.ip || req.connection?.remoteAddress || 'unknown';
+  if (isRateLimited(geoRateMap, ip, 40, 60000)) {
+    return res.status(429).json({ error: 'Search rate limit reached. Please wait a moment.' });
+  }
+
   const query = String(req.query.q || '').trim();
   if (!query || query.length < 2) {
     return res.json({ success: true, results: [] });
@@ -390,9 +531,12 @@ function getLocalNetworkIp() {
 app.get('/api/network-info', (req, res) => {
   const localIp = getLocalNetworkIp();
   const port = process.env.PORT || 3000;
+  const rawTunnel = process.env.TUNNEL_URL || process.env.NGROK_DOMAIN || '';
+  const tunnelUrl = rawTunnel ? rawTunnel.trim().replace(/\/+$/, '') : null;
   res.json({
     localIp,
     port,
+    tunnelUrl,
     localUrl: `http://${localIp}:${port}`,
     urls: {
       landing: `http://${localIp}:${port}/`,
@@ -421,7 +565,7 @@ app.get('/api/restaurants', (req, res) => {
   res.json(restaurants);
 });
 
-app.patch('/api/restaurants/:id', (req, res) => {
+app.patch('/api/restaurants/:id', authenticateUser, requireRole(['VENDOR', 'ADMIN']), (req, res) => {
   const restId = req.params.id;
   const rest = db.prepare('SELECT * FROM restaurants WHERE id = ?').get(restId);
   if (!rest) return res.status(404).json({ error: 'Restaurant not found' });
@@ -456,14 +600,17 @@ app.get('/api/restaurants/:id/menu', (req, res) => {
 });
 
 // Add new dish to restaurant menu
-app.post('/api/restaurants/:id/menu', (req, res) => {
+app.post('/api/restaurants/:id/menu', authenticateUser, requireRole(['VENDOR', 'ADMIN']), (req, res) => {
   const restId = req.params.id;
+  if (req.user.role === 'VENDOR' && req.user.restaurant_id && Number(req.user.restaurant_id) !== Number(restId)) {
+    return res.status(403).json({ error: 'Forbidden: You can only edit your own restaurant menu.' });
+  }
   const rest = db.prepare('SELECT id FROM restaurants WHERE id = ?').get(restId);
   if (!rest) return res.status(404).json({ error: 'Restaurant not found' });
 
   const { name, category, price, is_available } = req.body;
-  const cleanName = String(name || '').trim();
-  const cleanCategory = String(category || 'Specialties').trim();
+  const cleanName = sanitizeText(String(name || ''));
+  const cleanCategory = sanitizeText(String(category || 'Specialties'));
   const numPrice = Number(price);
 
   if (!cleanName || cleanName.length < 2) {
@@ -496,13 +643,16 @@ app.post('/api/restaurants/:id/menu', (req, res) => {
 });
 
 // Edit existing dish
-app.patch('/api/menu-items/:id', (req, res) => {
+app.patch('/api/menu-items/:id', authenticateUser, requireRole(['VENDOR', 'ADMIN']), (req, res) => {
   const item = db.prepare('SELECT * FROM menu_items WHERE id = ?').get(req.params.id);
   if (!item) return res.status(404).json({ error: 'Dish not found' });
+  if (req.user.role === 'VENDOR' && req.user.restaurant_id && Number(req.user.restaurant_id) !== Number(item.restaurant_id)) {
+    return res.status(403).json({ error: 'Forbidden: You can only edit items from your own kitchen.' });
+  }
 
   const { name, category, price, is_available } = req.body;
-  const cleanName = name !== undefined ? String(name).trim() : item.name;
-  const cleanCat = category !== undefined ? String(category).trim() : item.category;
+  const cleanName = name !== undefined ? sanitizeText(String(name)) : item.name;
+  const cleanCat = category !== undefined ? sanitizeText(String(category)) : item.category;
   const numPrice = price !== undefined ? Number(price) : item.price;
   const avail = is_available !== undefined ? (is_available ? 1 : 0) : item.is_available;
 
@@ -525,9 +675,12 @@ app.patch('/api/menu-items/:id', (req, res) => {
 });
 
 // Delete dish from restaurant menu
-app.delete('/api/menu-items/:id', (req, res) => {
+app.delete('/api/menu-items/:id', authenticateUser, requireRole(['VENDOR', 'ADMIN']), (req, res) => {
   const item = db.prepare('SELECT * FROM menu_items WHERE id = ?').get(req.params.id);
   if (!item) return res.status(404).json({ error: 'Dish not found' });
+  if (req.user.role === 'VENDOR' && req.user.restaurant_id && Number(req.user.restaurant_id) !== Number(item.restaurant_id)) {
+    return res.status(403).json({ error: 'Forbidden: You can only delete items from your own kitchen.' });
+  }
 
   db.prepare('DELETE FROM menu_items WHERE id = ?').run(item.id);
 
@@ -536,9 +689,12 @@ app.delete('/api/menu-items/:id', (req, res) => {
 });
 
 // Quick stock toggle
-app.patch('/api/menu-items/:id/toggle', (req, res) => {
+app.patch('/api/menu-items/:id/toggle', authenticateUser, requireRole(['VENDOR', 'ADMIN']), (req, res) => {
   const item = db.prepare('SELECT * FROM menu_items WHERE id = ?').get(req.params.id);
   if (!item) return res.status(404).json({ error: 'Item not found' });
+  if (req.user.role === 'VENDOR' && req.user.restaurant_id && Number(req.user.restaurant_id) !== Number(item.restaurant_id)) {
+    return res.status(403).json({ error: 'Forbidden: You can only update stock for your own kitchen.' });
+  }
   const newAvail = item.is_available ? 0 : 1;
   db.prepare('UPDATE menu_items SET is_available = ? WHERE id = ?').run(newAvail, item.id);
   io.emit('menu:update', { restaurant_id: item.restaurant_id });
@@ -568,7 +724,8 @@ app.post('/api/orders/:id/rate', (req, res) => {
   const { rating, review } = req.body;
   const orderId = req.params.id;
   const numericRating = Math.max(1, Math.min(5, Number(rating) || 5));
-  db.prepare('UPDATE orders SET rating = ?, review_text = ? WHERE id = ?').run(numericRating, String(review || '').trim(), orderId);
+  const cleanReview = sanitizeText(review || '');
+  db.prepare('UPDATE orders SET rating = ?, review_text = ? WHERE id = ?').run(numericRating, cleanReview, orderId);
   res.json({ success: true, message: 'Thank you for your feedback!' });
 });
 
@@ -581,6 +738,10 @@ app.post('/api/orders', (req, res) => {
 
   const { customer_name, customer_address, customer_email, restaurant_id, items, payment_method, user_id, dest_lat, dest_lng, coupon_code, discount_amount } = req.body;
   const cleanPhone = validation.cleanPhone;
+  const cleanName = sanitizeText(customer_name);
+  const cleanAddress = sanitizeText(customer_address);
+  const cleanEmail = sanitizeText(customer_email || '');
+  const cleanCoupon = coupon_code ? sanitizeText(String(coupon_code)).toUpperCase() : null;
 
   const menuItems = db.prepare('SELECT * FROM menu_items WHERE restaurant_id = ?').all(restaurant_id);
   const menuMap = Object.fromEntries(menuItems.map(m => [m.id, m]));
@@ -598,7 +759,7 @@ app.post('/api/orders', (req, res) => {
     resolvedItems.push({ menu_item_id: menuItem.id, name: menuItem.name, price: menuItem.price, qty: it.qty });
   }
 
-  const isFreeDel = coupon_code && String(coupon_code).toUpperCase() === 'FREEDEL';
+  const isFreeDel = cleanCoupon === 'FREEDEL';
   const deliveryFee = isFreeDel ? 0 : 25;
   const discount = Math.max(0, Number(discount_amount) || 0);
   const total = Math.max(0, subtotal + deliveryFee - discount);
@@ -610,10 +771,10 @@ app.post('/api/orders', (req, res) => {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const info = insertOrder.run(
-    user_id || null, customer_name.trim(), customer_address.trim(), cleanPhone, customer_email || '', 
+    user_id || null, cleanName, cleanAddress, cleanPhone, cleanEmail, 
     dest_lat || null, dest_lng || null,
     restaurant_id, subtotal, deliveryFee, total, payment_method || 'UPI', deliveryOtp,
-    coupon_code || null, discount
+    cleanCoupon, discount
   );
   const orderId = info.lastInsertRowid;
 
@@ -653,18 +814,24 @@ app.get('/api/orders', (req, res) => {
 });
 
 // Customer cancellation
-app.post('/api/orders/:id/cancel', (req, res) => {
+app.post('/api/orders/:id/cancel', authenticateUser, (req, res) => {
   const { reason } = req.body;
   const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(req.params.id);
   if (!order) return res.status(404).json({ error: 'Order not found' });
+
+  // Customers can only cancel their own order unless Admin/Vendor
+  if (req.user.role === 'CUSTOMER' && order.user_id && req.user.id !== order.user_id) {
+    return res.status(403).json({ error: 'Forbidden: You can only cancel your own orders.' });
+  }
 
   if (!['PLACED', 'ACCEPTED'].includes(order.status)) {
     return res.status(400).json({ error: `Cannot cancel order in status ${order.status}. Kitchen has already started preparation.` });
   }
 
+  const cleanReason = sanitizeText(reason || 'Customer requested cancellation');
   db.prepare('UPDATE orders SET status = ?, cancel_reason = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-    .run('CANCELLED', reason || 'Customer requested cancellation', order.id);
-  logStatus(order.id, 'CANCELLED', reason ? `Cancelled by customer: ${reason}` : 'Cancelled by customer');
+    .run('CANCELLED', cleanReason, order.id);
+  logStatus(order.id, 'CANCELLED', cleanReason ? `Cancelled: ${cleanReason}` : 'Cancelled by customer');
 
   if (order.rider_id) {
     db.prepare("UPDATE riders SET status = 'AVAILABLE' WHERE id = ?").run(order.rider_id);
@@ -676,19 +843,38 @@ app.post('/api/orders/:id/cancel', (req, res) => {
   res.json(updated);
 });
 
-// Verify Delivery OTP (Proof of Delivery by Rider)
-app.post('/api/orders/:id/verify-otp', (req, res) => {
+// Verify Delivery OTP (Proof of Delivery by Rider) with Brute Force Defense
+app.post('/api/orders/:id/verify-otp', authenticateUser, requireRole(['RIDER', 'ADMIN']), (req, res) => {
   const { otp } = req.body;
-  const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(req.params.id);
+  const orderId = req.params.id;
+  const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
   if (!order) return res.status(404).json({ error: 'Order not found' });
+
+  // Brute force lockout check: max 5 failed attempts per order
+  const now = Date.now();
+  const attempt = otpAttemptMap.get(orderId) || { failed: 0, lockedUntil: 0 };
+  if (attempt.lockedUntil && now < attempt.lockedUntil) {
+    const waitSecs = Math.ceil((attempt.lockedUntil - now) / 1000);
+    return res.status(429).json({ error: `Security lockout: Too many incorrect PIN attempts. Locked for ${waitSecs}s for customer security.` });
+  }
 
   if (!['OUT_FOR_DELIVERY', 'PICKED_UP'].includes(order.status)) {
     return res.status(400).json({ error: `Cannot deliver order in status ${order.status}` });
   }
 
-  if (String(order.delivery_otp).trim() !== String(otp).trim()) {
-    return res.status(400).json({ error: 'Invalid 4-digit Delivery PIN. Please ask customer for correct PIN.' });
+  if (String(order.delivery_otp).trim() !== String(otp || '').trim()) {
+    attempt.failed++;
+    if (attempt.failed >= 5) {
+      attempt.lockedUntil = now + (10 * 60 * 1000); // 10 minute lockout
+      otpAttemptMap.set(orderId, attempt);
+      return res.status(429).json({ error: 'Maximum PIN verification attempts exceeded. Locked for 10 minutes for customer safety.' });
+    }
+    otpAttemptMap.set(orderId, attempt);
+    return res.status(400).json({ error: `Invalid 4-digit Delivery PIN. (${5 - attempt.failed} attempts remaining)` });
   }
+
+  // Clear failed attempts counter on success
+  otpAttemptMap.delete(orderId);
 
   db.prepare('UPDATE orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run('DELIVERED', order.id);
   logStatus(order.id, 'DELIVERED', `Verified via customer Delivery OTP (${otp})`);
@@ -705,12 +891,16 @@ app.post('/api/orders/:id/verify-otp', (req, res) => {
 });
 
 // ---------- VENDOR ----------
-app.get('/api/vendor/:restaurantId/orders', (req, res) => {
-  const rows = db.prepare('SELECT id FROM orders WHERE restaurant_id = ? ORDER BY id DESC').all(req.params.restaurantId);
+app.get('/api/vendor/:restaurantId/orders', authenticateUser, requireRole(['VENDOR', 'ADMIN']), (req, res) => {
+  const restId = req.params.restaurantId;
+  if (req.user.role === 'VENDOR' && req.user.restaurant_id && Number(req.user.restaurant_id) !== Number(restId)) {
+    return res.status(403).json({ error: 'Forbidden: You can only view orders for your own kitchen.' });
+  }
+  const rows = db.prepare('SELECT id FROM orders WHERE restaurant_id = ? ORDER BY id DESC').all(restId);
   res.json(rows.map(r => getFullOrder(r.id)));
 });
 
-app.patch('/api/orders/:id/status', (req, res) => {
+app.patch('/api/orders/:id/status', authenticateUser, requireRole(['VENDOR', 'RIDER', 'ADMIN']), (req, res) => {
   const { status, note } = req.body;
   const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(req.params.id);
   if (!order) return res.status(404).json({ error: 'Order not found' });
@@ -720,8 +910,9 @@ app.patch('/api/orders/:id/status', (req, res) => {
     return res.status(400).json({ error: `Cannot move order from ${order.status} to ${status}` });
   }
 
+  const cleanNote = sanitizeText(note || '');
   db.prepare('UPDATE orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(status, order.id);
-  logStatus(order.id, status, note || '');
+  logStatus(order.id, status, cleanNote);
 
   if (status === 'READY') {
     const rider = db.prepare("SELECT * FROM riders WHERE status = 'AVAILABLE' ORDER BY id ASC LIMIT 1").get();
@@ -749,19 +940,27 @@ app.get('/api/riders', (req, res) => {
   res.json(db.prepare('SELECT * FROM riders').all());
 });
 
-app.get('/api/riders/:id/orders', (req, res) => {
+app.get('/api/riders/:id/orders', authenticateUser, requireRole(['RIDER', 'ADMIN']), (req, res) => {
+  const riderId = req.params.id;
+  if (req.user.role === 'RIDER' && req.user.rider_id && Number(req.user.rider_id) !== Number(riderId)) {
+    return res.status(403).json({ error: 'Forbidden: You can only view assignments for your own rider account.' });
+  }
   const rows = db.prepare(
     "SELECT id FROM orders WHERE rider_id = ? AND status NOT IN ('DELIVERED','CANCELLED','REJECTED') ORDER BY id DESC"
-  ).all(req.params.id);
+  ).all(riderId);
   res.json(rows.map(r => getFullOrder(r.id)));
 });
 
-app.patch('/api/riders/:id/status', (req, res) => {
+app.patch('/api/riders/:id/status', authenticateUser, requireRole(['RIDER', 'ADMIN']), (req, res) => {
   const { status } = req.body;
+  const riderId = req.params.id;
+  if (req.user.role === 'RIDER' && req.user.rider_id && Number(req.user.rider_id) !== Number(riderId)) {
+    return res.status(403).json({ error: 'Forbidden: You can only update your own rider duty status.' });
+  }
   if (!['AVAILABLE', 'OFFLINE'].includes(status)) {
     return res.status(400).json({ error: 'Status must be AVAILABLE or OFFLINE' });
   }
-  db.prepare('UPDATE riders SET status = ? WHERE id = ?').run(status, req.params.id);
+  db.prepare('UPDATE riders SET status = ? WHERE id = ?').run(status, riderId);
   if (status === 'AVAILABLE') {
     tryAssignWaitingOrders();
   }
@@ -769,13 +968,13 @@ app.patch('/api/riders/:id/status', (req, res) => {
   res.json({ success: true, status });
 });
 
-// ---------- ADMIN ----------
-app.get('/api/admin/orders', (req, res) => {
+// ---------- ADMIN (SECURED) ----------
+app.get('/api/admin/orders', authenticateUser, requireRole(['ADMIN']), (req, res) => {
   const rows = db.prepare('SELECT id FROM orders ORDER BY id DESC').all();
   res.json(rows.map(r => getFullOrder(r.id)));
 });
 
-app.post('/api/admin/orders/:id/assign', (req, res) => {
+app.post('/api/admin/orders/:id/assign', authenticateUser, requireRole(['ADMIN']), (req, res) => {
   const { rider_id } = req.body;
   const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(req.params.id);
   if (!order) return res.status(404).json({ error: 'Order not found' });
@@ -796,7 +995,7 @@ app.post('/api/admin/orders/:id/assign', (req, res) => {
   res.json(updated);
 });
 
-app.get('/api/admin/overview', (req, res) => {
+app.get('/api/admin/overview', authenticateUser, requireRole(['ADMIN']), (req, res) => {
   const totalOrders = db.prepare('SELECT COUNT(*) as c FROM orders').get().c;
   const activeOrders = db.prepare(
     "SELECT COUNT(*) as c FROM orders WHERE status NOT IN ('DELIVERED','CANCELLED','REJECTED')"

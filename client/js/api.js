@@ -1,5 +1,12 @@
 const API = {
   base: '',
+  _getAuthHeader() {
+    try {
+      const token = localStorage.getItem('fe_token');
+      if (token) return { 'Authorization': `Bearer ${token}` };
+    } catch (e) {}
+    return {};
+  },
   async _handleResponse(res) {
     const contentType = res.headers.get('content-type') || '';
     let bodyData = null;
@@ -13,6 +20,12 @@ const API = {
     if (!res.ok) {
       if (bodyData && bodyData.error) {
         throw new Error(bodyData.error);
+      }
+      if (res.status === 401) {
+        throw new Error('Please sign in to continue.');
+      }
+      if (res.status === 403) {
+        throw new Error('Access denied. Insufficient permissions for this action.');
       }
       if (res.status === 502 || res.status === 503) {
         throw new Error('Our kitchen server is taking a breather (502 Gateway). Reconnecting momentarily...');
@@ -33,13 +46,20 @@ const API = {
     }
   },
   async get(url) {
-    const res = await fetch(url);
+    const res = await fetch(url, {
+      headers: {
+        ...this._getAuthHeader(),
+      }
+    });
     return this._handleResponse(res);
   },
   async post(url, body) {
     const res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...this._getAuthHeader(),
+      },
       body: JSON.stringify(body),
     });
     return this._handleResponse(res);
@@ -47,8 +67,21 @@ const API = {
   async patch(url, body) {
     const res = await fetch(url, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...this._getAuthHeader(),
+      },
       body: JSON.stringify(body),
+    });
+    return this._handleResponse(res);
+  },
+  async delete(url) {
+    const res = await fetch(url, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        ...this._getAuthHeader(),
+      },
     });
     return this._handleResponse(res);
   },

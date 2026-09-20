@@ -1,8 +1,21 @@
 const db = require('./db');
 const crypto = require('crypto');
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
-function hashPassword(password) {
-  return crypto.createHash('sha256').update(password + 'foodie_salt').digest('hex');
+const DEFAULT_SALT = process.env.PASSWORD_SALT || 'foodie_salt';
+
+function hashPassword(password, salt = DEFAULT_SALT) {
+  return crypto.createHash('sha256').update(password + salt).digest('hex');
+}
+
+function verifyPassword(inputPassword, storedHash) {
+  if (!inputPassword || !storedHash) return false;
+  if (hashPassword(inputPassword, DEFAULT_SALT) === storedHash) return true;
+  if (DEFAULT_SALT !== 'foodie_salt' && hashPassword(inputPassword, 'foodie_salt') === storedHash) {
+    return true;
+  }
+  return false;
 }
 
 // 1. Seed Restaurants and Riders if not already present
@@ -129,4 +142,4 @@ if (userCount === 0) {
   console.log('Seed user accounts complete.');
 }
 
-module.exports = { hashPassword };
+module.exports = { hashPassword, verifyPassword };
