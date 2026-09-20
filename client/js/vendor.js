@@ -8,13 +8,66 @@ try {
 
 let state = {
   restaurants: [],
-  activeRestaurantId: (currentUser && currentUser.restaurant_id) || localStorage.getItem('fe_vendor_restaurant') || null,
+  activeRestaurantId: localStorage.getItem('fe_vendor_restaurant') || (currentUser && currentUser.restaurant_id) || null,
   orders: [],
   menu: [],
   showHistory: false,
 };
 
+function renderAccessRestricted() {
+  const userRole = currentUser ? currentUser.role : 'GUEST';
+  const roleRedirects = {
+    CUSTOMER: { label: 'Go to Customer Portal', url: 'customer.html' },
+    RIDER: { label: 'Go to Rider Portal', url: 'rider.html' },
+    ADMIN: { label: 'Go to Operations Admin', url: 'admin.html' }
+  };
+  const target = roleRedirects[userRole];
+
+  view.innerHTML = `
+    <div style="max-width:460px; margin:60px auto; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:32px 24px; text-align:center; box-shadow:var(--shadow-sm);">
+      <div style="width:56px; height:56px; border-radius:50%; background:rgba(239,68,68,0.12); color:#EF4444; display:inline-flex; align-items:center; justify-content:center; margin-bottom:16px;">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      </div>
+      <h2 style="font-size:20px; font-weight:800; margin:0 0 8px; color:var(--ink); text-align:center;">Kitchen KDS Restricted</h2>
+      <p style="font-size:13px; color:var(--ink-secondary); margin:0 0 20px; line-height:1.5; text-align:center;">
+        ${currentUser ? `You are currently logged in with a <strong>${currentUser.role}</strong> account (${currentUser.email}). This portal is restricted to Restaurant Kitchen Vendors only.` : 'Live kitchen ticket management and food prep queues require authentication as a Restaurant Kitchen Vendor.'}
+      </p>
+      <div style="display:flex; flex-direction:column; gap:10px; align-items:stretch;">
+        ${target ? `
+          <a href="${target.url}" class="btn-primary" style="width:100%; justify-content:center; text-align:center; padding:10px; font-size:13px; font-weight:700; text-decoration:none; box-sizing:border-box;">
+            ${target.label}
+          </a>
+        ` : ''}
+        <button id="quickVendorLoginBtn" class="${target ? 'btn-secondary' : 'btn-primary'}" style="width:100%; padding:10px; font-size:13px; font-weight:700; justify-content:center; text-align:center; box-sizing:border-box;">
+          1-Click Log In as Kitchen Vendor
+        </button>
+        <a href="login.html" class="btn-secondary" style="width:100%; justify-content:center; text-align:center; padding:10px; font-size:13px; text-decoration:none; box-sizing:border-box;">
+          Sign In with Another Account
+        </a>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('quickVendorLoginBtn')?.addEventListener('click', async () => {
+    try {
+      const res = await API.post('/api/auth/login', { demoRole: 'VENDOR' });
+      localStorage.setItem('fe_token', res.token);
+      localStorage.setItem('fe_user', JSON.stringify(res.user));
+      currentUser = res.user;
+      toast('Authenticated as Kitchen Vendor', 'success');
+      location.reload();
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  });
+}
+
 async function init() {
+  const token = localStorage.getItem('fe_token');
+  if (!token || !currentUser || (currentUser.role !== 'VENDOR' && currentUser.role !== 'ADMIN')) {
+    renderAccessRestricted();
+    return;
+  }
   const headerActions = document.querySelector('.header-actions');
   if (headerActions && currentUser) {
     const logoutBtn = document.createElement('button');
@@ -122,6 +175,10 @@ function renderPicker() {
     el.addEventListener('click', async () => {
       state.activeRestaurantId = el.dataset.id;
       localStorage.setItem('fe_vendor_restaurant', state.activeRestaurantId);
+      if (currentUser) {
+        currentUser.restaurant_id = Number(state.activeRestaurantId);
+        localStorage.setItem('fe_user', JSON.stringify(currentUser));
+      }
       await loadOrders();
       render();
     });
@@ -178,7 +235,10 @@ function render() {
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           Menu & Products
         </button>
-        <button class="btn-secondary" id="switchRestBtn" style="font-size:12.5px; padding:7px 12px;">Switch Kitchen</button>
+        <select id="quickRestSelect" class="btn-secondary" style="font-size:12.5px; padding:6px 10px; cursor:pointer; font-weight:600;">
+          ${state.restaurants.map(x => `<option value="${x.id}" ${String(x.id) === String(r.id) ? 'selected' : ''}>🏢 ${x.name}</option>`).join('')}
+        </select>
+        <button class="btn-secondary" id="switchRestBtn" style="font-size:12.5px; padding:7px 12px;">All Kitchens</button>
       </div>
     </div>
 
@@ -295,6 +355,17 @@ function render() {
     localStorage.removeItem('fe_vendor_restaurant');
     state.activeRestaurantId = null;
     renderPicker();
+  });
+
+  document.getElementById('quickRestSelect')?.addEventListener('change', async (e) => {
+    state.activeRestaurantId = e.target.value;
+    localStorage.setItem('fe_vendor_restaurant', state.activeRestaurantId);
+    if (currentUser) {
+      currentUser.restaurant_id = Number(state.activeRestaurantId);
+      localStorage.setItem('fe_user', JSON.stringify(currentUser));
+    }
+    await loadOrders();
+    render();
   });
 
   document.getElementById('kdsDutyToggleBtn').addEventListener('click', async () => {

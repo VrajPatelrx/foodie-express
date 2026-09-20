@@ -23,18 +23,19 @@
       <div>FOODIE <span>EXPRESS</span></div>
     </div>
     <div class="header-actions">
-      <button id="phoneModalBtn" class="btn-secondary admin-qr-btn" title="Open QR Code to connect mobile devices" style="padding:6px 14px; font-size:12px; color:var(--primary); border-color:var(--primary); font-weight:700; border-radius:999px; display:inline-flex; align-items:center; gap:6px; height:32px; white-space:nowrap; cursor:pointer;">
+      <button id="phoneModalBtn" class="btn-secondary admin-qr-btn" title="Open QR Code to connect mobile devices" style="padding:6px 14px; font-size:12px; color:var(--primary); border-color:var(--primary); font-weight:700; border-radius:999px; display:inline-flex; align-items:center; justify-content:center; gap:6px; height:32px; white-space:nowrap; cursor:pointer;">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
         Mobile Access
       </button>
-      <button id="adminSignOutBtn" class="btn-secondary" style="padding:6px 14px; font-size:12px; height:32px; border-radius:999px; display:inline-flex; align-items:center; gap:6px;">
+      <button id="adminSignOutBtn" class="btn-secondary" style="padding:6px 14px; font-size:12px; height:32px; border-radius:999px; display:inline-flex; align-items:center; justify-content:center; gap:6px; white-space:nowrap; cursor:pointer;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
         Sign Out
       </button>
-      <a class="btn-secondary hide-mobile" href="index.html" style="padding:6px 14px; font-size:12px; display:inline-flex; align-items:center; gap:6px; height:32px; border-radius:999px;">
+      <a class="btn-secondary hide-mobile" href="index.html" style="padding:6px 14px; font-size:12px; display:inline-flex; align-items:center; justify-content:center; gap:6px; height:32px; border-radius:999px; text-decoration:none;">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
         Switch Role
       </a>
-      <div class="role-tag hide-mobile" style="background:var(--purple-soft); color:var(--purple); border-color:var(--purple); height:32px; display:inline-flex; align-items:center;">Operations Admin</div>
+      <div class="role-tag hide-mobile" style="background:var(--purple-soft); color:var(--purple); border-color:var(--purple); height:32px; display:inline-flex; align-items:center; justify-content:center;">Operations Admin</div>
     </div>
   </div>
 
@@ -76,10 +77,10 @@
               <h3 style="font-size:18px; margin:0; display:flex; align-items:center; gap:8px;">
                 Mobile Device Access
               </h3>
-              <button class="btn-secondary" id="closePhoneModal" style="padding:4px 8px; font-size:12px;">✕</button>
+              <button class="btn-secondary" id="closePhoneModal" style="padding:4px 8px; font-size:12px; justify-content:center;">✕</button>
             </div>
             
-            <p style="font-size:13px; color:var(--ink-secondary); margin:0 0 14px; text-align:left;">
+            <p style="font-size:13px; color:var(--ink-secondary); margin:0 0 14px; text-align:center;">
               Select a portal and protocol to generate a real-time QR code:
             </p>
 
@@ -107,12 +108,12 @@
               <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(url)}" alt="Scan QR Code" style="display:block; width:180px; height:180px;">
             </div>
 
-            <div style="background:var(--surface-alt); padding:10px 14px; border-radius:var(--radius-sm); border:1px solid var(--border); font-size:13px; margin-bottom:14px; word-break:break-all;">
-              <div style="font-size:11px; font-weight:700; color:var(--ink-secondary); text-transform:uppercase; margin-bottom:2px;">Target Address</div>
-              <code style="font-weight:800; font-size:13px; color:var(--primary);">${url}</code>
+            <div style="background:var(--surface-alt); padding:10px 14px; border-radius:var(--radius-sm); border:1px solid var(--border); font-size:13px; margin-bottom:14px; word-break:break-all; text-align:center;">
+              <div style="font-size:11px; font-weight:700; color:var(--ink-secondary); text-transform:uppercase; margin-bottom:2px; text-align:center;">Target Address</div>
+              <code style="font-weight:800; font-size:13px; color:var(--primary); display:block; text-align:center;">${url}</code>
             </div>
 
-            <button class="btn-secondary" id="closePhoneModalBtn" style="width:100%;">Close</button>
+            <button class="btn-secondary" id="closePhoneModalBtn" style="width:100%; justify-content:center; text-align:center;">Close</button>
           </div>
         `;
 
@@ -138,7 +139,7 @@
       renderContent();
       document.body.appendChild(overlay);
     }).catch(err => {
-      alert('Could not fetch network IP: ' + err.message);
+      alert('Could not fetch network info: ' + err.message);
     });
   }
 

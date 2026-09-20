@@ -23,19 +23,19 @@
       <div>FOODIE <span>EXPRESS</span></div>
     </div>
     <div class="header-actions" id="indexHeaderActions">
-      <button id="phoneModalBtn" class="btn-secondary hide-mobile" style="padding:7px 14px; font-size:13px; color:var(--primary); border-color:var(--primary); display:inline-flex; align-items:center; gap:6px;">
+      <button id="phoneModalBtn" class="btn-secondary hide-mobile" style="padding:7px 14px; font-size:13px; color:var(--primary); border-color:var(--primary); display:inline-flex; align-items:center; justify-content:center; gap:6px; height:36px; border-radius:999px; cursor:pointer;">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
         Mobile Access
       </button>
-      <button id="pwaInstallBtn" class="btn-secondary hide-mobile" onclick="PWA.install()" style="display:none; padding:7px 14px; font-size:13px; color:var(--primary); border-color:var(--primary); align-items:center; gap:6px;">
+      <button id="pwaInstallBtn" class="btn-secondary hide-mobile" onclick="PWA.install()" style="display:none; padding:7px 14px; font-size:13px; color:var(--primary); border-color:var(--primary); align-items:center; justify-content:center; gap:6px; height:36px; border-radius:999px; cursor:pointer;">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         Install App
       </button>
-      <a class="btn-primary" href="login.html" style="padding:7px 16px; font-size:12px; white-space:nowrap; border-radius:8px; display:inline-flex; align-items:center; gap:6px;">
+      <a class="btn-primary" href="login.html" style="padding:7px 16px; font-size:12px; white-space:nowrap; border-radius:999px; display:inline-flex; align-items:center; justify-content:center; gap:6px; height:36px; text-decoration:none;">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
         Sign In
       </a>
-      <div class="role-tag hide-mobile">Logistics Platform</div>
+      <div class="role-tag hide-mobile" style="height:36px; display:inline-flex; align-items:center; justify-content:center;">Logistics Platform</div>
     </div>
   </div>
 
@@ -109,22 +109,21 @@
     const user = JSON.parse(localStorage.getItem('fe_user'));
     if (user) {
       const container = document.getElementById('indexHeaderActions');
-      container.innerHTML = `
-        <button id="phoneModalBtn" class="btn-secondary hide-mobile" style="padding:6px 12px; font-size:12px; color:var(--primary); border-color:var(--primary); display:inline-flex; align-items:center; gap:6px;">
+      container.innerHTML = `        <button id="phoneModalBtn" class="btn-secondary hide-mobile" style="padding:6px 12px; font-size:12px; color:var(--primary); border-color:var(--primary); display:inline-flex; align-items:center; justify-content:center; gap:6px; height:32px; border-radius:999px; cursor:pointer;">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
           Mobile Access
         </button>
-        <button id="pwaInstallBtn" class="btn-secondary hide-mobile" onclick="PWA.install()" style="display:none; padding:6px 12px; font-size:12px; color:var(--primary); border-color:var(--primary); align-items:center; gap:6px;">
+        <button id="pwaInstallBtn" class="btn-secondary hide-mobile" onclick="PWA.install()" style="display:none; padding:6px 12px; font-size:12px; color:var(--primary); border-color:var(--primary); align-items:center; justify-content:center; gap:6px; height:32px; border-radius:999px; cursor:pointer;">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           Install App
         </button>
-        <div class="header-user-pill" title="${user.name} (${user.role})">
+        <div class="header-user-pill" title="${user.name} (${user.role})" style="height:32px; box-sizing:border-box;">
           <span class="user-avatar-micro" style="display:inline-flex; align-items:center;">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
           </span>
           <span class="user-display-name">${user.name.split(' ')[0]}</span>
         </div>
-        <button id="idxLogout" class="btn-secondary idx-logout-btn">Sign Out</button>
+        <button id="idxLogout" class="btn-secondary idx-logout-btn" style="height:32px; border-radius:999px !important; display:inline-flex; align-items:center; justify-content:center; cursor:pointer;">Sign Out</button>
       `;
       document.getElementById('idxLogout').addEventListener('click', () => {
         localStorage.removeItem('fe_user');
@@ -152,16 +151,16 @@
             <div style="width:48px; height:48px; border-radius:12px; background:var(--primary-soft); color:var(--primary); display:inline-flex; align-items:center; justify-content:center; margin-bottom:12px;">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
             </div>
-            <h3 style="font-size:19px; margin-bottom:4px;">Mobile Device Access</h3>
-            <p style="font-size:13px; color:var(--ink-secondary); margin:0 0 14px;">
+            <h3 style="font-size:19px; margin-bottom:4px; text-align:center;">Mobile Device Access</h3>
+            <p style="font-size:13px; color:var(--ink-secondary); margin:0 0 14px; text-align:center;">
               Scan this QR code with your smartphone camera to connect to the platform.
             </p>
 
             <div style="display:flex; justify-content:center; gap:8px; margin-bottom:14px;">
-              <button class="btn-secondary" id="toggleHttpsBtn" style="padding:6px 14px; font-size:12px; border-radius:999px; ${useHttps ? 'background:var(--primary); color:#fff; border-color:var(--primary); font-weight:700;' : ''}">
-                HTTPS Tunnel ${tunnelAddress ? '' : '(Not Configured)'}
+              <button class="btn-secondary" id="toggleHttpsBtn" style="padding:6px 14px; font-size:12px; border-radius:999px; justify-content:center; ${useHttps ? 'background:var(--primary); color:#fff; border-color:var(--primary); font-weight:700;' : ''}">
+                HTTPS Tunnel
               </button>
-              <button class="btn-secondary" id="toggleWifiBtn" style="padding:6px 14px; font-size:12px; border-radius:999px; ${!useHttps ? 'background:var(--primary); color:#fff; border-color:var(--primary); font-weight:700;' : ''}">
+              <button class="btn-secondary" id="toggleWifiBtn" style="padding:6px 14px; font-size:12px; border-radius:999px; justify-content:center; ${!useHttps ? 'background:var(--primary); color:#fff; border-color:var(--primary); font-weight:700;' : ''}">
                 Local Wi-Fi
               </button>
             </div>
@@ -170,14 +169,14 @@
               <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(activeUrl)}" alt="Scan QR Code" style="display:block; width:180px; height:180px;">
             </div>
 
-            <div style="background:var(--surface-alt); padding:10px 14px; border-radius:var(--radius-sm); border:1px solid var(--border); font-size:13px; margin-bottom:14px; word-break:break-all;">
-              <div style="font-size:11px; font-weight:700; color:var(--ink-secondary); text-transform:uppercase; margin-bottom:2px;">
+            <div style="background:var(--surface-alt); padding:10px 14px; border-radius:var(--radius-sm); border:1px solid var(--border); font-size:13px; margin-bottom:14px; word-break:break-all; text-align:center;">
+              <div style="font-size:11px; font-weight:700; color:var(--ink-secondary); text-transform:uppercase; margin-bottom:2px; text-align:center;">
                 ${useHttps && tunnelAddress ? 'Public Secure Address' : 'Local Network Address'}
               </div>
-              <code style="font-weight:800; font-size:13px; color:var(--primary);">${activeUrl}</code>
+              <code style="font-weight:800; font-size:13px; color:var(--primary); display:block; text-align:center;">${activeUrl}</code>
             </div>
 
-            <button class="btn-secondary" id="closePhoneModal" style="width:100%;">Close</button>
+            <button class="btn-secondary" id="closePhoneModal" style="width:100%; justify-content:center; text-align:center;">Close</button>
           </div>
         `;
 

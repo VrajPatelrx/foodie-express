@@ -11,8 +11,12 @@ function setStatus(text, bg = '#334155', color = '#E2E8F0') {
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function ensureSimulatorAuth() {
+  let user = null;
+  try {
+    user = JSON.parse(localStorage.getItem('fe_user'));
+  } catch (e) {}
   const token = localStorage.getItem('fe_token');
-  if (token) return;
+  if (token && user && user.role === 'ADMIN') return;
   try {
     const res = await API.post('/api/auth/login', { demoRole: 'ADMIN' });
     if (res && res.token) {

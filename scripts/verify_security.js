@@ -3,9 +3,22 @@ const http = require('http');
 async function runTests() {
   console.log('--- STARTING FOODIE EXPRESS SECURITY VERIFICATION ---\n');
 
-  // Start the server programmatically for testing
-  const serverProcess = require('../server/server.js');
-  await new Promise(r => setTimeout(r, 1000));
+  // Check if server is already running (e.g. dev server), otherwise start it
+  const isAlreadyRunning = await new Promise(resolve => {
+    const ping = http.get({ hostname: '127.0.0.1', port: process.env.PORT || 3000, path: '/api/network-info' }, () => {
+      resolve(true);
+    });
+    ping.on('error', () => resolve(false));
+    ping.setTimeout(500, () => {
+      ping.destroy();
+      resolve(false);
+    });
+  });
+
+  if (!isAlreadyRunning) {
+    require('../server/server.js');
+    await new Promise(r => setTimeout(r, 1000));
+  }
 
   function request(path, options = {}) {
     return new Promise((resolve, reject) => {
@@ -102,6 +115,64 @@ async function runTests() {
     assert(validAdminReq.status === 200, 'Admin token successfully accesses /api/admin/overview');
     assert(validAdminReq.body.economics !== undefined, 'Admin receives economic data');
 
+    // 6b. Testing Role Isolation & Multi-Profile Access
+    console.log('\n6b. Testing Role Isolation & Multi-Profile Access:');
+    const vendorLogin = await request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: { demoRole: 'VENDOR' }
+    });
+    assert(vendorLogin.status === 200, 'Vendor login succeeds');
+    const vendorToken = vendorLogin.body.token;
+
+    const riderLogin = await request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: { demoRole: 'RIDER' }
+    });
+    assert(riderLogin.status === 200, 'Rider login succeeds');
+    const riderToken = riderLogin.body.token;
+
+    // Vendor trying to place customer order -> 403
+    const vendorOrderReq = await request('/api/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${vendorToken}` },
+      body: {
+        customer_name: 'Vendor Order Attempt',
+        customer_address: '123 Test Street, Anand',
+        customer_phone: '9876543210',
+        restaurant_id: 1,
+        items: [{ menu_item_id: 1, qty: 1 }],
+        payment_method: 'UPI'
+      }
+    });
+    assert(vendorOrderReq.status === 403, 'Vendor token forbidden from placing customer orders (403)');
+
+    // Rider trying to place customer order -> 403
+    const riderOrderReq = await request('/api/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${riderToken}` },
+      body: {
+        customer_name: 'Rider Order Attempt',
+        customer_address: '123 Test Street, Anand',
+        customer_phone: '9876543210',
+        restaurant_id: 1,
+        items: [{ menu_item_id: 1, qty: 1 }],
+        payment_method: 'UPI'
+      }
+    });
+    assert(riderOrderReq.status === 403, 'Rider token forbidden from placing customer orders (403)');
+
+    // Vendor can access Kitchen 1 AND Kitchen 2 (all kitchens accessible to authorized vendor)
+    const vRest1 = await request('/api/vendor/1/orders', { headers: { 'Authorization': `Bearer ${vendorToken}` } });
+    const vRest2 = await request('/api/vendor/2/orders', { headers: { 'Authorization': `Bearer ${vendorToken}` } });
+    assert(vRest1.status === 200 && vRest2.status === 200, 'Vendor token can access all kitchen boards (1 and 2)');
+
+    // Rider can access Rider 1 AND Rider 2 (all riders accessible to authorized rider)
+    const rRider1 = await request('/api/riders/1/orders', { headers: { 'Authorization': `Bearer ${riderToken}` } });
+    const rRider2 = await request('/api/riders/2/orders', { headers: { 'Authorization': `Bearer ${riderToken}` } });
+    assert(rRider1.status === 200 && rRider2.status === 200, 'Rider token can access all rider order queues (1 and 2)');
+
     // 7. OTP Brute-Force Lockout Defense
     console.log('\n7. Testing OTP Brute-Force Defense:');
     // Create mock order
@@ -135,6 +206,11 @@ async function runTests() {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
       body: { status: 'READY' }
+    });
+    await request(`/api/admin/orders/${testOrderId}/assign`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
+      body: { rider_id: 1 }
     });
     await request(`/api/orders/${testOrderId}/status`, {
       method: 'PATCH',

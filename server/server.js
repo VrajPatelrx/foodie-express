@@ -602,9 +602,6 @@ app.get('/api/restaurants/:id/menu', (req, res) => {
 // Add new dish to restaurant menu
 app.post('/api/restaurants/:id/menu', authenticateUser, requireRole(['VENDOR', 'ADMIN']), (req, res) => {
   const restId = req.params.id;
-  if (req.user.role === 'VENDOR' && req.user.restaurant_id && Number(req.user.restaurant_id) !== Number(restId)) {
-    return res.status(403).json({ error: 'Forbidden: You can only edit your own restaurant menu.' });
-  }
   const rest = db.prepare('SELECT id FROM restaurants WHERE id = ?').get(restId);
   if (!rest) return res.status(404).json({ error: 'Restaurant not found' });
 
@@ -646,9 +643,6 @@ app.post('/api/restaurants/:id/menu', authenticateUser, requireRole(['VENDOR', '
 app.patch('/api/menu-items/:id', authenticateUser, requireRole(['VENDOR', 'ADMIN']), (req, res) => {
   const item = db.prepare('SELECT * FROM menu_items WHERE id = ?').get(req.params.id);
   if (!item) return res.status(404).json({ error: 'Dish not found' });
-  if (req.user.role === 'VENDOR' && req.user.restaurant_id && Number(req.user.restaurant_id) !== Number(item.restaurant_id)) {
-    return res.status(403).json({ error: 'Forbidden: You can only edit items from your own kitchen.' });
-  }
 
   const { name, category, price, is_available } = req.body;
   const cleanName = name !== undefined ? sanitizeText(String(name)) : item.name;
@@ -678,9 +672,6 @@ app.patch('/api/menu-items/:id', authenticateUser, requireRole(['VENDOR', 'ADMIN
 app.delete('/api/menu-items/:id', authenticateUser, requireRole(['VENDOR', 'ADMIN']), (req, res) => {
   const item = db.prepare('SELECT * FROM menu_items WHERE id = ?').get(req.params.id);
   if (!item) return res.status(404).json({ error: 'Dish not found' });
-  if (req.user.role === 'VENDOR' && req.user.restaurant_id && Number(req.user.restaurant_id) !== Number(item.restaurant_id)) {
-    return res.status(403).json({ error: 'Forbidden: You can only delete items from your own kitchen.' });
-  }
 
   db.prepare('DELETE FROM menu_items WHERE id = ?').run(item.id);
 
@@ -692,9 +683,6 @@ app.delete('/api/menu-items/:id', authenticateUser, requireRole(['VENDOR', 'ADMI
 app.patch('/api/menu-items/:id/toggle', authenticateUser, requireRole(['VENDOR', 'ADMIN']), (req, res) => {
   const item = db.prepare('SELECT * FROM menu_items WHERE id = ?').get(req.params.id);
   if (!item) return res.status(404).json({ error: 'Item not found' });
-  if (req.user.role === 'VENDOR' && req.user.restaurant_id && Number(req.user.restaurant_id) !== Number(item.restaurant_id)) {
-    return res.status(403).json({ error: 'Forbidden: You can only update stock for your own kitchen.' });
-  }
   const newAvail = item.is_available ? 0 : 1;
   db.prepare('UPDATE menu_items SET is_available = ? WHERE id = ?').run(newAvail, item.id);
   io.emit('menu:update', { restaurant_id: item.restaurant_id });
@@ -731,12 +719,29 @@ app.post('/api/orders/:id/rate', (req, res) => {
 
 // ---------- ORDERS: CUSTOMER ----------
 app.post('/api/orders', (req, res) => {
+  // Enforce partner role boundary: VENDOR and RIDER tokens cannot place customer delivery orders
+  const callerToken = extractToken(req);
+  if (callerToken) {
+    const caller = verifyToken(callerToken);
+    if (caller && (caller.role === 'VENDOR' || caller.role === 'RIDER')) {
+      return res.status(403).json({ error: `Access denied. ${caller.role} partner accounts cannot create customer delivery orders.` });
+    }
+  }
+
+  const { user_id } = req.body;
+  if (user_id) {
+    const callerUser = db.prepare('SELECT role FROM users WHERE id = ?').get(user_id);
+    if (callerUser && (callerUser.role === 'VENDOR' || callerUser.role === 'RIDER')) {
+      return res.status(403).json({ error: `Access denied. ${callerUser.role} partner accounts cannot create customer delivery orders.` });
+    }
+  }
+
   const validation = validateOrderInput(req.body);
   if (!validation.isValid) {
     return res.status(400).json({ error: validation.errors.join(' ') });
   }
 
-  const { customer_name, customer_address, customer_email, restaurant_id, items, payment_method, user_id, dest_lat, dest_lng, coupon_code, discount_amount } = req.body;
+  const { customer_name, customer_address, customer_email, restaurant_id, items, payment_method, dest_lat, dest_lng, coupon_code, discount_amount } = req.body;
   const cleanPhone = validation.cleanPhone;
   const cleanName = sanitizeText(customer_name);
   const cleanAddress = sanitizeText(customer_address);
@@ -893,9 +898,6 @@ app.post('/api/orders/:id/verify-otp', authenticateUser, requireRole(['RIDER', '
 // ---------- VENDOR ----------
 app.get('/api/vendor/:restaurantId/orders', authenticateUser, requireRole(['VENDOR', 'ADMIN']), (req, res) => {
   const restId = req.params.restaurantId;
-  if (req.user.role === 'VENDOR' && req.user.restaurant_id && Number(req.user.restaurant_id) !== Number(restId)) {
-    return res.status(403).json({ error: 'Forbidden: You can only view orders for your own kitchen.' });
-  }
   const rows = db.prepare('SELECT id FROM orders WHERE restaurant_id = ? ORDER BY id DESC').all(restId);
   res.json(rows.map(r => getFullOrder(r.id)));
 });
@@ -942,9 +944,6 @@ app.get('/api/riders', (req, res) => {
 
 app.get('/api/riders/:id/orders', authenticateUser, requireRole(['RIDER', 'ADMIN']), (req, res) => {
   const riderId = req.params.id;
-  if (req.user.role === 'RIDER' && req.user.rider_id && Number(req.user.rider_id) !== Number(riderId)) {
-    return res.status(403).json({ error: 'Forbidden: You can only view assignments for your own rider account.' });
-  }
   const rows = db.prepare(
     "SELECT id FROM orders WHERE rider_id = ? AND status NOT IN ('DELIVERED','CANCELLED','REJECTED') ORDER BY id DESC"
   ).all(riderId);
@@ -954,9 +953,6 @@ app.get('/api/riders/:id/orders', authenticateUser, requireRole(['RIDER', 'ADMIN
 app.patch('/api/riders/:id/status', authenticateUser, requireRole(['RIDER', 'ADMIN']), (req, res) => {
   const { status } = req.body;
   const riderId = req.params.id;
-  if (req.user.role === 'RIDER' && req.user.rider_id && Number(req.user.rider_id) !== Number(riderId)) {
-    return res.status(403).json({ error: 'Forbidden: You can only update your own rider duty status.' });
-  }
   if (!['AVAILABLE', 'OFFLINE'].includes(status)) {
     return res.status(400).json({ error: 'Status must be AVAILABLE or OFFLINE' });
   }

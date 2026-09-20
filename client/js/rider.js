@@ -8,11 +8,64 @@ try {
 
 let state = {
   riders: [],
-  activeRiderId: (currentUser && currentUser.rider_id) || localStorage.getItem('fe_rider_id') || null,
+  activeRiderId: localStorage.getItem('fe_rider_id') || (currentUser && currentUser.rider_id) || null,
   orders: [],
 };
 
+function renderAccessRestricted() {
+  const userRole = currentUser ? currentUser.role : 'GUEST';
+  const roleRedirects = {
+    CUSTOMER: { label: 'Go to Customer Portal', url: 'customer.html' },
+    VENDOR: { label: 'Go to Kitchen KDS', url: 'vendor.html' },
+    ADMIN: { label: 'Go to Operations Admin', url: 'admin.html' }
+  };
+  const target = roleRedirects[userRole];
+
+  view.innerHTML = `
+    <div style="max-width:460px; margin:60px auto; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:32px 24px; text-align:center; box-shadow:var(--shadow-sm);">
+      <div style="width:56px; height:56px; border-radius:50%; background:rgba(239,68,68,0.12); color:#EF4444; display:inline-flex; align-items:center; justify-content:center; margin-bottom:16px;">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      </div>
+      <h2 style="font-size:20px; font-weight:800; margin:0 0 8px; color:var(--ink); text-align:center;">Rider Portal Restricted</h2>
+      <p style="font-size:13px; color:var(--ink-secondary); margin:0 0 20px; line-height:1.5; text-align:center;">
+        ${currentUser ? `You are currently logged in with a <strong>${currentUser.role}</strong> account (${currentUser.email}). This portal is restricted to Delivery Partners (Riders) only.` : 'Live delivery runs, earnings tracking, and OTP verification require authentication as a Delivery Partner (Rider).'}
+      </p>
+      <div style="display:flex; flex-direction:column; gap:10px; align-items:stretch;">
+        ${target ? `
+          <a href="${target.url}" class="btn-primary" style="width:100%; justify-content:center; text-align:center; padding:10px; font-size:13px; font-weight:700; text-decoration:none; box-sizing:border-box;">
+            ${target.label}
+          </a>
+        ` : ''}
+        <button id="quickRiderLoginBtn" class="${target ? 'btn-secondary' : 'btn-primary'}" style="width:100%; padding:10px; font-size:13px; font-weight:700; justify-content:center; text-align:center; box-sizing:border-box;">
+          1-Click Log In as Delivery Rider
+        </button>
+        <a href="login.html" class="btn-secondary" style="width:100%; justify-content:center; text-align:center; padding:10px; font-size:13px; text-decoration:none; box-sizing:border-box;">
+          Sign In with Another Account
+        </a>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('quickRiderLoginBtn')?.addEventListener('click', async () => {
+    try {
+      const res = await API.post('/api/auth/login', { demoRole: 'RIDER' });
+      localStorage.setItem('fe_token', res.token);
+      localStorage.setItem('fe_user', JSON.stringify(res.user));
+      currentUser = res.user;
+      toast('Authenticated as Delivery Rider', 'success');
+      location.reload();
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  });
+}
+
 async function init() {
+  const token = localStorage.getItem('fe_token');
+  if (!token || !currentUser || (currentUser.role !== 'RIDER' && currentUser.role !== 'ADMIN')) {
+    renderAccessRestricted();
+    return;
+  }
   const headerActions = document.querySelector('.header-actions');
   if (headerActions && currentUser) {
     const logoutBtn = document.createElement('button');
@@ -108,6 +161,10 @@ function renderPicker() {
     el.addEventListener('click', async () => {
       state.activeRiderId = el.dataset.id;
       localStorage.setItem('fe_rider_id', state.activeRiderId);
+      if (currentUser) {
+        currentUser.rider_id = Number(state.activeRiderId);
+        localStorage.setItem('fe_user', JSON.stringify(currentUser));
+      }
       await loadOrders();
       render();
     });
@@ -147,7 +204,10 @@ function render() {
           <div class="switch-toggle ${isOnline ? 'on' : ''}" id="dutyToggleBtn"></div>
         </div>
 
-        <button class="btn-secondary" id="switchRiderBtn">Switch Profile</button>
+        <select id="quickRiderSelect" class="btn-secondary" style="font-size:12.5px; padding:6px 10px; cursor:pointer; font-weight:600;">
+          ${state.riders.map(x => `<option value="${x.id}" ${String(x.id) === String(rider.id) ? 'selected' : ''}>🛵 ${x.name} (${x.vehicle || 'Bike'})</option>`).join('')}
+        </select>
+        <button class="btn-secondary" id="switchRiderBtn">All Riders</button>
       </div>
     </div>
 
@@ -216,6 +276,17 @@ function render() {
     localStorage.removeItem('fe_rider_id');
     state.activeRiderId = null;
     renderPicker();
+  });
+
+  document.getElementById('quickRiderSelect')?.addEventListener('change', async (e) => {
+    state.activeRiderId = e.target.value;
+    localStorage.setItem('fe_rider_id', state.activeRiderId);
+    if (currentUser) {
+      currentUser.rider_id = Number(state.activeRiderId);
+      localStorage.setItem('fe_user', JSON.stringify(currentUser));
+    }
+    await loadOrders();
+    render();
   });
 
   document.getElementById('dutyToggleBtn').addEventListener('click', async () => {

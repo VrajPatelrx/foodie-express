@@ -23,20 +23,34 @@ let state = {
 };
 
 function renderAccessRestricted() {
+  if (adminSignOutBtn) adminSignOutBtn.style.display = 'none';
+  const userRole = currentUser ? currentUser.role : 'GUEST';
+  const roleRedirects = {
+    CUSTOMER: { label: 'Go to Customer Portal', url: 'customer.html' },
+    VENDOR: { label: 'Go to Kitchen KDS', url: 'vendor.html' },
+    RIDER: { label: 'Go to Rider Portal', url: 'rider.html' }
+  };
+  const target = roleRedirects[userRole];
+
   view.innerHTML = `
     <div style="max-width:460px; margin:60px auto; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:32px 24px; text-align:center; box-shadow:var(--shadow-sm);">
       <div style="width:56px; height:56px; border-radius:50%; background:rgba(239,68,68,0.12); color:#EF4444; display:inline-flex; align-items:center; justify-content:center; margin-bottom:16px;">
         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
       </div>
-      <h2 style="font-size:20px; font-weight:800; margin:0 0 8px; color:var(--ink);">Admin Access Restricted</h2>
-      <p style="font-size:13px; color:var(--ink-secondary); margin:0 0 20px; line-height:1.5;">
-        Platform revenue analytics, financial logs, and fleet dispatch controls are protected by security authentication.
+      <h2 style="font-size:20px; font-weight:800; margin:0 0 8px; color:var(--ink); text-align:center;">Admin Access Restricted</h2>
+      <p style="font-size:13px; color:var(--ink-secondary); margin:0 0 20px; line-height:1.5; text-align:center;">
+        ${currentUser ? `You are currently logged in with a <strong>${currentUser.role}</strong> account (${currentUser.email}). Operations Admin is restricted to Platform Administrators only.` : 'Platform revenue analytics, financial logs, and fleet dispatch controls are protected by security authentication.'}
       </p>
-      <div style="display:flex; flex-direction:column; gap:10px;">
-        <button id="quickAdminLoginBtn" class="btn-primary" style="width:100%; padding:10px; font-size:13px; font-weight:700;">
+      <div style="display:flex; flex-direction:column; gap:10px; align-items:stretch;">
+        ${target ? `
+          <a href="${target.url}" class="btn-primary" style="width:100%; justify-content:center; text-align:center; padding:10px; font-size:13px; font-weight:700; text-decoration:none; box-sizing:border-box;">
+            ${target.label}
+          </a>
+        ` : ''}
+        <button id="quickAdminLoginBtn" class="${target ? 'btn-secondary' : 'btn-primary'}" style="width:100%; padding:10px; font-size:13px; font-weight:700; justify-content:center; text-align:center; box-sizing:border-box;">
           1-Click Log In as Platform Admin
         </button>
-        <a href="login.html" class="btn-secondary" style="width:100%; text-align:center; padding:10px; font-size:13px; text-decoration:none;">
+        <a href="login.html" class="btn-secondary" style="width:100%; justify-content:center; text-align:center; padding:10px; font-size:13px; text-decoration:none; box-sizing:border-box;">
           Go to Standard Login Page
         </a>
       </div>
@@ -105,6 +119,7 @@ socket.on('riders:update', async () => {
 });
 
 function render() {
+  if (adminSignOutBtn) adminSignOutBtn.style.display = 'inline-flex';
   const { overview, orders } = state;
   const eco = overview.economics || {};
 
