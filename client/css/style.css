@@ -2225,12 +2225,134 @@ table.data tr:hover td {
 }
 .custom-map-pin.rider {
   background: linear-gradient(135deg, #2563EB, #1D4ED8);
-  border: 2px solid #FFF;
-  transition: transform 0.4s ease;
+  border: 2.5px solid #FFF;
+  position: relative;
+  transition: transform 0.6s cubic-bezier(0.25, 1, 0.5, 1);
+  overflow: visible !important;
+}
+.rider-beacon-pulse {
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  right: -8px;
+  bottom: -8px;
+  border-radius: 50%;
+  background: rgba(37, 99, 235, 0.4);
+  animation: riderBeaconWave 2s cubic-bezier(0.2, 0.8, 0.4, 1) infinite;
+  pointer-events: none;
+  z-index: -1;
+}
+@keyframes riderBeaconWave {
+  0% { transform: scale(0.85); opacity: 0.85; }
+  70% { transform: scale(2.4); opacity: 0; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+.rider-heading-dir {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  transition: transform 0.35s ease;
 }
 .custom-map-pin.destination {
   background: linear-gradient(135deg, #16A34A, #15803D);
   border: 2px solid #FFF;
+}
+
+/* Live GPS Telemetry Floating HUD on Tracking Map */
+.live-gps-hud {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(15, 23, 42, 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  border-radius: 999px;
+  padding: 6px 16px;
+  color: #FFF;
+  font-size: 12px;
+  pointer-events: auto;
+  white-space: nowrap;
+  animation: hudSlideDown 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes hudSlideDown {
+  from { opacity: 0; transform: translate(-50%, -10px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+.live-gps-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22C55E;
+  box-shadow: 0 0 8px #22C55E;
+  animation: gpsBlink 1.4s infinite ease-in-out;
+}
+@keyframes gpsBlink {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.75); }
+}
+.live-gps-sep {
+  width: 1px;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.2);
+}
+.live-gps-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 600;
+}
+.live-gps-item strong {
+  color: #38BDF8;
+  font-weight: 800;
+}
+
+/* Rider Trip Map & GPS Simulation Control Styles */
+.rider-map-box {
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  margin-bottom: 14px;
+  position: relative;
+  background: var(--surface-alt);
+}
+.rider-trip-map {
+  width: 100%;
+  height: 220px;
+  background: #E2E8F0;
+}
+.rider-sim-bar {
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.sim-progress-track {
+  width: 100%;
+  height: 6px;
+  background: var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 6px;
+}
+.sim-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #2563EB, #FF5200);
+  width: 0%;
+  transition: width 0.4s ease;
+  border-radius: 999px;
 }
 
 /* ==========================================================
@@ -2391,6 +2513,126 @@ table.data tr:hover td {
 
 .admin-table th.text-right, .admin-table td.text-right {
   text-align: right !important;
+}
+
+/* ==========================================================
+   ADMIN ANALYTICS & DASHBOARD STYLES
+   ========================================================== */
+.analytics-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+  margin-bottom: 24px;
+}
+@media (max-width: 900px) {
+  .analytics-grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.analytics-chart-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+}
+
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chart-title {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--ink);
+  margin: 0;
+}
+
+.chart-subtitle {
+  font-size: 12px;
+  color: var(--ink-secondary);
+  margin-top: 2px;
+}
+
+.chart-canvas-wrap {
+  position: relative;
+  height: 250px;
+  width: 100%;
+}
+
+.kpi-trend-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 999px;
+}
+.kpi-trend-pill.up {
+  background: rgba(34, 197, 94, 0.12);
+  color: #16A34A;
+}
+.kpi-trend-pill.neutral {
+  background: rgba(59, 130, 246, 0.12);
+  color: #2563EB;
+}
+
+.leaderboard-rank {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+}
+.leaderboard-rank.rank-1 { background: #FEF3C7; color: #D97706; border: 1px solid #FDE68A; }
+.leaderboard-rank.rank-2 { background: #F1F5F9; color: #475569; border: 1px solid #E2E8F0; }
+.leaderboard-rank.rank-3 { background: #FFEDD5; color: #C2410C; border: 1px solid #FED7AA; }
+.leaderboard-rank.rank-other { background: var(--surface-alt); color: var(--ink-secondary); }
+
+.coupon-ticket-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.coupon-ticket-card {
+  background: var(--surface);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  padding: 16px;
+  position: relative;
+  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: var(--shadow-sm);
+}
+.coupon-ticket-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.coupon-code-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 800;
+  font-size: 14px;
+  letter-spacing: 1px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--primary-border);
+  display: inline-block;
 }
 
 

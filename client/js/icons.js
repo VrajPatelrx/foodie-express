@@ -52,6 +52,13 @@ const Icons = {
     </svg>`;
   },
 
+  // GPS Navigation Pointer
+  navigation(size = 20, color = 'currentColor') {
+    return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon-svg">
+      <polygon points="3 11 22 2 13 21 11 13 3 11"/>
+    </svg>`;
+  },
+
   // Operations / Admin Analytics
   admin(size = 20, color = 'currentColor') {
     return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon-svg">

@@ -569,132 +569,248 @@ async function renderMenuModal() {
   const existing = document.getElementById('menuManagerModalOverlay');
   if (existing) existing.remove();
 
-  const menu = await API.get(`/api/restaurants/${state.activeRestaurantId}/menu`);
+  let menu = [];
+  try {
+    menu = await API.get(`/api/restaurants/${state.activeRestaurantId}/menu`);
+  } catch (err) {
+    toast('Failed to load restaurant menu: ' + err.message, 'error');
+    return;
+  }
+
+  let searchQuery = '';
+  let selectedCategory = 'All';
+  let stockFilter = 'ALL'; // 'ALL', 'IN_STOCK', 'SOLD_OUT'
+
   const overlay = document.createElement('div');
   overlay.id = 'menuManagerModalOverlay';
   overlay.className = 'modal-overlay';
-  overlay.innerHTML = `
-    <div class="modal-card" style="max-width:620px; width:100%;">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; border-bottom:1px solid var(--border); padding-bottom:12px; gap:10px;">
-        <div>
-          <div style="display:flex; align-items:center; gap:8px;">
-            <h3 style="margin:0; font-size:18px;">Menu & Product Manager</h3>
-            <span style="font-size:12px; color:var(--ink-secondary); background:var(--surface-alt); padding:2px 8px; border-radius:999px; font-weight:700;">${menu.length} Dishes</span>
-          </div>
-          <p style="margin:3px 0 0; font-size:12.5px; color:var(--ink-secondary);">Add new dishes, modify prices, update details, or toggle stock.</p>
-        </div>
-        <div style="display:flex; align-items:center; gap:8px;">
-          <button class="btn-primary" id="openAddDishBtn" style="padding:6px 14px; font-size:12.5px; font-weight:700; display:inline-flex; align-items:center; gap:5px; white-space:nowrap;">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            Add New Dish
-          </button>
-          <button class="btn-secondary" id="closeMenuManagerModal" style="padding:4px 8px; font-size:12px; border-radius:6px;">✕</button>
-        </div>
-      </div>
 
-      <div style="max-height:420px; overflow-y:auto; padding-right:4px;" id="menuProductListContainer">
-        ${menu.length ? menu.map(item => `
-          <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 10px; border-bottom:1px solid var(--border); gap:12px; flex-wrap:wrap;">
-            <div style="display:flex; align-items:center; gap:10px; flex:1; min-width:180px;">
-              <span style="display:inline-flex; flex-shrink:0;">${typeof Icons !== 'undefined' ? Icons.veg(15) : ''}</span>
-              <div>
-                <div style="font-weight:700; font-size:14px; color:var(--ink);">${item.name}</div>
-                <div style="font-size:12px; color:var(--ink-secondary); display:flex; align-items:center; gap:6px; margin-top:2px;">
-                  <strong style="color:var(--ink); font-size:13px;">₹${item.price}</strong>
-                  <span>•</span>
-                  <span style="background:var(--surface-alt); padding:1px 6px; border-radius:4px; font-size:11px;">${item.category || 'General'}</span>
+  function renderModalInner() {
+    const categories = ['All', ...new Set(menu.map(m => m.category || 'General'))];
+    const totalCount = menu.length;
+    const inStockCount = menu.filter(m => m.is_available).length;
+    const soldOutCount = totalCount - inStockCount;
+
+    const filtered = menu.filter(item => {
+      const q = searchQuery.toLowerCase().trim();
+      const matchesSearch = !q || 
+        item.name.toLowerCase().includes(q) || 
+        (item.category && item.category.toLowerCase().includes(q)) ||
+        (item.description && item.description.toLowerCase().includes(q));
+
+      const matchesCat = selectedCategory === 'All' || item.category === selectedCategory;
+
+      const matchesStock = stockFilter === 'ALL' || 
+        (stockFilter === 'IN_STOCK' && item.is_available) ||
+        (stockFilter === 'SOLD_OUT' && !item.is_available);
+
+      return matchesSearch && matchesCat && matchesStock;
+    });
+
+    overlay.innerHTML = `
+      <div class="modal-card" style="max-width:680px; width:95%; max-height:90vh; display:flex; flex-direction:column; padding:20px; box-sizing:border-box;">
+        <!-- Modal Header -->
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:14px; border-bottom:1px solid var(--border); padding-bottom:12px; gap:10px;">
+          <div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <h3 style="margin:0; font-size:19px; font-weight:800;">Menu & Dish Manager</h3>
+              <span style="font-size:12px; color:var(--ink-secondary); background:var(--surface-alt); padding:2px 8px; border-radius:999px; font-weight:700;">${totalCount} Dishes</span>
+            </div>
+            <p style="margin:3px 0 0; font-size:12.5px; color:var(--ink-secondary);">
+              Add new pure veg dishes, adjust prices, edit descriptions, and toggle live kitchen stock.
+            </p>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+            <button class="btn-primary" id="openAddDishBtn" style="padding:7px 14px; font-size:12.5px; font-weight:700; display:inline-flex; align-items:center; gap:5px; white-space:nowrap; border-radius:8px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Add New Dish
+            </button>
+            <button class="btn-secondary" id="closeMenuManagerModal" style="padding:5px 9px; font-size:13px; border-radius:6px;">✕</button>
+          </div>
+        </div>
+
+        <!-- Filter & Search Controls -->
+        <div style="margin-bottom:14px; display:flex; flex-direction:column; gap:10px;">
+          <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+            <div style="flex:1; min-width:200px; position:relative;">
+              <input type="text" id="menuSearchInput" value="${searchQuery}" placeholder="Search dishes by name, category, or ingredients..." 
+                style="width:100%; height:36px; padding:0 12px; font-size:13px; border-radius:8px; border:1px solid var(--border); box-sizing:border-box; background:#fff;">
+            </div>
+            <!-- Quick Stock Filter Tabs -->
+            <div style="display:inline-flex; background:var(--surface-alt); padding:3px; border-radius:8px; border:1px solid var(--border);">
+              <button type="button" class="btn-secondary stock-filter-btn ${stockFilter === 'ALL' ? 'active' : ''}" data-filter="ALL" style="padding:4px 10px; font-size:11.5px; font-weight:700; border:none; ${stockFilter === 'ALL' ? 'background:#fff; box-shadow:var(--shadow-sm); color:var(--ink);' : 'background:transparent; color:var(--ink-secondary);'}">
+                All (${totalCount})
+              </button>
+              <button type="button" class="btn-secondary stock-filter-btn ${stockFilter === 'IN_STOCK' ? 'active' : ''}" data-filter="IN_STOCK" style="padding:4px 10px; font-size:11.5px; font-weight:700; border:none; ${stockFilter === 'IN_STOCK' ? 'background:#fff; box-shadow:var(--shadow-sm); color:var(--green);' : 'background:transparent; color:var(--ink-secondary);'}">
+                In Stock (${inStockCount})
+              </button>
+              <button type="button" class="btn-secondary stock-filter-btn ${stockFilter === 'SOLD_OUT' ? 'active' : ''}" data-filter="SOLD_OUT" style="padding:4px 10px; font-size:11.5px; font-weight:700; border:none; ${stockFilter === 'SOLD_OUT' ? 'background:#fff; box-shadow:var(--shadow-sm); color:var(--red);' : 'background:transparent; color:var(--ink-secondary);'}">
+                Sold Out (${soldOutCount})
+              </button>
+            </div>
+          </div>
+
+          <!-- Category Pills -->
+          <div style="display:flex; gap:6px; overflow-x:auto; padding-bottom:4px; scrollbar-width:none;">
+            ${categories.map(cat => `
+              <button type="button" class="cat-pill modal-cat-pill ${selectedCategory === cat ? 'active' : ''}" data-cat="${cat}" style="padding:4px 10px; font-size:11.5px;">
+                ${cat}
+              </button>
+            `).join('')}
+          </div>
+        </div>
+
+        <!-- Scrollable Dish List -->
+        <div style="flex:1; overflow-y:auto; padding-right:4px; border:1px solid var(--border); border-radius:8px; background:var(--surface);" id="menuProductListContainer">
+          ${filtered.length ? filtered.map(item => `
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 14px; border-bottom:1px solid var(--border); gap:12px; flex-wrap:wrap; transition:background 0.15s;" onmouseover="this.style.background='var(--surface-alt)'" onmouseout="this.style.background='transparent'">
+              <div style="display:flex; align-items:flex-start; gap:10px; flex:1; min-width:200px;">
+                <span style="display:inline-flex; flex-shrink:0; margin-top:2px;">${typeof Icons !== 'undefined' ? Icons.veg(15) : ''}</span>
+                <div>
+                  <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                    <div style="font-weight:700; font-size:14px; color:var(--ink);">${item.name}</div>
+                    <span style="background:var(--primary-soft); color:var(--primary); padding:1px 7px; border-radius:4px; font-size:10.5px; font-weight:700;">${item.category || 'General'}</span>
+                    ${!item.is_available ? `<span style="background:rgba(239,68,68,0.12); color:#EF4444; padding:1px 6px; border-radius:4px; font-size:10.5px; font-weight:700;">Sold Out</span>` : ''}
+                  </div>
+                  ${item.description ? `
+                    <div style="font-size:12px; color:var(--ink-secondary); margin-top:3px; line-height:1.35; max-width:380px;">${item.description}</div>
+                  ` : ''}
+                  <div style="font-size:13px; font-weight:800; color:var(--ink); margin-top:4px;">
+                    ₹${item.price}
+                  </div>
                 </div>
               </div>
+
+              <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+                <!-- Quick Stock Toggle -->
+                <button type="button" class="btn-secondary toggle-stock-btn" data-id="${item.id}" data-state="${item.is_available}" style="font-size:11.5px; font-weight:700; padding:6px 12px; border-radius:6px; ${item.is_available ? 'color:var(--green); border-color:var(--green);' : 'color:var(--red); border-color:var(--red);'}">
+                  ${item.is_available ? '✓ In Stock' : '✕ Sold Out'}
+                </button>
+
+                <!-- Edit Dish -->
+                <button type="button" class="btn-secondary edit-dish-btn" data-id="${item.id}" style="font-size:11.5px; padding:6px 12px; border-radius:6px; display:inline-flex; align-items:center; gap:4px; font-weight:600;">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                  Edit
+                </button>
+
+                <!-- Delete Dish -->
+                <button type="button" class="btn-secondary delete-dish-btn" data-id="${item.id}" data-name="${item.name}" style="font-size:11.5px; padding:6px 10px; border-radius:6px; color:var(--red); border-color:#FCA5A5; display:inline-flex; align-items:center; gap:4px;">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                </button>
+              </div>
             </div>
-
-            <div style="display:flex; align-items:center; gap:8px;">
-              <!-- Quick Stock Toggle -->
-              <button class="btn-secondary toggle-stock-btn" data-id="${item.id}" data-state="${item.is_available}" style="font-size:11.5px; font-weight:700; padding:5px 10px; border-radius:6px; ${item.is_available ? 'color:var(--green); border-color:var(--green);' : 'color:var(--red); border-color:var(--red);'}">
-                ${item.is_available ? 'In Stock' : 'Sold Out'}
-              </button>
-
-              <!-- Edit Dish -->
-              <button class="btn-secondary edit-dish-btn" data-id="${item.id}" style="font-size:11.5px; padding:5px 10px; border-radius:6px; display:inline-flex; align-items:center; gap:4px;">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-                Edit
-              </button>
-
-              <!-- Delete Dish -->
-              <button class="btn-secondary delete-dish-btn" data-id="${item.id}" data-name="${item.name}" style="font-size:11.5px; padding:5px 10px; border-radius:6px; color:var(--red); border-color:var(--red); display:inline-flex; align-items:center; gap:4px;">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                Delete
-              </button>
+          `).join('') : `
+            <div style="text-align:center; padding:50px 10px; color:var(--ink-secondary); font-size:13.5px;">
+              ${searchQuery || selectedCategory !== 'All' || stockFilter !== 'ALL' ? `
+                No dishes matched your filters.<br>
+                <button type="button" class="btn-secondary" id="clearDishFiltersBtn" style="margin-top:10px; font-size:12px; padding:5px 12px;">Clear Filters</button>
+              ` : `
+                No dishes found on this menu.<br>Click <strong>"+ Add New Dish"</strong> above to add your first pure veg item!
+              `}
             </div>
-          </div>
-        `).join('') : `
-          <div style="text-align:center; padding:40px 10px; color:var(--ink-secondary); font-size:13.5px;">
-            No dishes found on this menu.<br>Click <strong>"+ Add New Dish"</strong> above to add your first pure veg item!
-          </div>
-        `}
+          `}
+        </div>
       </div>
-    </div>
-  `;
+    `;
+
+    bindEvents();
+  }
+
+  function bindEvents() {
+    overlay.querySelector('#closeMenuManagerModal')?.addEventListener('click', () => overlay.remove());
+
+    overlay.querySelector('#clearDishFiltersBtn')?.addEventListener('click', () => {
+      searchQuery = '';
+      selectedCategory = 'All';
+      stockFilter = 'ALL';
+      renderModalInner();
+    });
+
+    const searchInp = overlay.querySelector('#menuSearchInput');
+    if (searchInp) {
+      searchInp.addEventListener('input', (e) => {
+        searchQuery = e.target.value;
+        renderModalInner();
+        const newInp = overlay.querySelector('#menuSearchInput');
+        if (newInp) {
+          newInp.focus();
+          newInp.setSelectionRange(newInp.value.length, newInp.value.length);
+        }
+      });
+    }
+
+    overlay.querySelectorAll('.stock-filter-btn').forEach(b => {
+      b.addEventListener('click', () => {
+        stockFilter = b.dataset.filter;
+        renderModalInner();
+      });
+    });
+
+    overlay.querySelectorAll('.modal-cat-pill').forEach(b => {
+      b.addEventListener('click', () => {
+        selectedCategory = b.dataset.cat;
+        renderModalInner();
+      });
+    });
+
+    overlay.querySelector('#openAddDishBtn')?.addEventListener('click', () => {
+      renderDishFormModal(null, async () => {
+        menu = await API.get(`/api/restaurants/${state.activeRestaurantId}/menu`);
+        renderModalInner();
+      });
+    });
+
+    overlay.querySelectorAll('.toggle-stock-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.id;
+        try {
+          btn.disabled = true;
+          const res = await API.patch(`/api/menu-items/${id}/toggle`);
+          const itm = menu.find(m => String(m.id) === String(id));
+          if (itm) itm.is_available = res.is_available;
+          toast(`Stock status: ${res.is_available ? 'In Stock' : 'Sold Out'}`, 'info');
+          renderModalInner();
+        } catch (err) {
+          toast(err.message, 'error');
+          btn.disabled = false;
+        }
+      });
+    });
+
+    overlay.querySelectorAll('.edit-dish-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const item = menu.find(m => String(m.id) === String(btn.dataset.id));
+        if (item) {
+          renderDishFormModal(item, async () => {
+            menu = await API.get(`/api/restaurants/${state.activeRestaurantId}/menu`);
+            renderModalInner();
+          });
+        }
+      });
+    });
+
+    overlay.querySelectorAll('.delete-dish-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.id;
+        const name = btn.dataset.name;
+        if (!confirm(`Are you sure you want to permanently delete "${name}" from the menu?`)) return;
+
+        try {
+          btn.disabled = true;
+          await API.delete(`/api/menu-items/${id}`);
+          menu = menu.filter(m => String(m.id) !== String(id));
+          toast(`Removed "${name}" from menu`, 'info');
+          renderModalInner();
+        } catch (err) {
+          toast(err.message, 'error');
+          btn.disabled = false;
+        }
+      });
+    });
+  }
+
+  renderModalInner();
   document.body.appendChild(overlay);
-
-  overlay.querySelector('#closeMenuManagerModal').addEventListener('click', () => overlay.remove());
-
-  // Wire Add Dish button
-  overlay.querySelector('#openAddDishBtn').addEventListener('click', () => {
-    renderDishFormModal(null, async () => {
-      await renderMenuModal();
-    });
-  });
-
-  // Wire Stock Toggle buttons
-  overlay.querySelectorAll('.toggle-stock-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const id = btn.dataset.id;
-      try {
-        btn.disabled = true;
-        const res = await API.patch(`/api/menu-items/${id}/toggle`);
-        btn.dataset.state = res.is_available;
-        btn.textContent = res.is_available ? 'In Stock' : 'Sold Out';
-        btn.style.color = res.is_available ? 'var(--green)' : 'var(--red)';
-        btn.style.borderColor = res.is_available ? 'var(--green)' : 'var(--red)';
-        btn.disabled = false;
-        toast(`Stock updated: ${res.is_available ? 'In Stock' : 'Sold Out'}`, 'info');
-      } catch (err) {
-        toast(err.message, 'error');
-        btn.disabled = false;
-      }
-    });
-  });
-
-  // Wire Edit buttons
-  overlay.querySelectorAll('.edit-dish-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const item = menu.find(m => String(m.id) === String(btn.dataset.id));
-      if (item) {
-        renderDishFormModal(item, async () => {
-          await renderMenuModal();
-        });
-      }
-    });
-  });
-
-  // Wire Delete buttons
-  overlay.querySelectorAll('.delete-dish-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const id = btn.dataset.id;
-      const name = btn.dataset.name;
-      if (!confirm(`Are you sure you want to permanently delete "${name}" from the menu?`)) return;
-
-      try {
-        btn.disabled = true;
-        await API.delete(`/api/menu-items/${id}`);
-        toast(`Removed "${name}" from menu`, 'info');
-        await renderMenuModal();
-      } catch (err) {
-        toast(err.message, 'error');
-        btn.disabled = false;
-      }
-    });
-  });
 }
 
 // --- ADD / EDIT DISH FORM MODAL ---
@@ -704,45 +820,68 @@ function renderDishFormModal(existingItem = null, onSuccess = () => {}) {
   overlay.className = 'modal-overlay';
   overlay.style.zIndex = '11000'; // Layer above menu manager modal
   overlay.innerHTML = `
-    <div class="modal-card" style="max-width:440px;">
+    <div class="modal-card" style="max-width:480px; width:92%; text-align:left;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; border-bottom:1px solid var(--border); padding-bottom:10px;">
         <div style="display:flex; align-items:center; gap:8px;">
           <span style="display:inline-flex;">${typeof Icons !== 'undefined' ? Icons.veg(16) : ''}</span>
-          <h3 style="margin:0; font-size:16px;">${isEdit ? 'Edit Dish Details' : 'Add New Pure Veg Dish'}</h3>
+          <h3 style="margin:0; font-size:17px; font-weight:800;">${isEdit ? 'Edit Dish Details' : 'Add New Pure Veg Dish'}</h3>
         </div>
-        <button class="btn-secondary" id="closeDishFormModal" style="padding:4px 8px; font-size:12px; border-radius:6px;">✕</button>
+        <button type="button" class="btn-secondary" id="closeDishFormModal" style="padding:4px 8px; font-size:12px; border-radius:6px;">✕</button>
       </div>
 
       <form id="dishForm">
         <div style="margin-bottom:12px;">
-          <label style="display:block; font-size:13px; font-weight:700; margin-bottom:4px;">Dish Name</label>
-          <input type="text" id="dishName" required value="${isEdit ? existingItem.name : ''}" placeholder="e.g. Special Mugg Pulav Bowl" style="width:100%; height:38px; padding:0 12px; border-radius:8px; border:1px solid var(--border); box-sizing:border-box; font-size:13.5px;">
+          <label style="display:block; font-size:12.5px; font-weight:700; margin-bottom:4px;">Dish Name *</label>
+          <input type="text" id="dishName" required value="${isEdit ? existingItem.name : ''}" placeholder="e.g. Special Gujarati Thali Bowl" 
+            style="width:100%; height:38px; padding:0 12px; border-radius:8px; border:1px solid var(--border); box-sizing:border-box; font-size:13.5px; font-weight:600;">
         </div>
 
         <div style="margin-bottom:12px;">
-          <label style="display:block; font-size:13px; font-weight:700; margin-bottom:4px;">Category</label>
-          <input type="text" id="dishCategory" list="dishCategoryList" required value="${isEdit ? (existingItem.category || 'Meals') : 'Meals'}" placeholder="e.g. Pulav, Meals, Snacks" style="width:100%; height:38px; padding:0 12px; border-radius:8px; border:1px solid var(--border); box-sizing:border-box; font-size:13.5px;">
+          <label style="display:block; font-size:12.5px; font-weight:700; margin-bottom:4px;">Category *</label>
+          <input type="text" id="dishCategory" list="dishCategoryList" required value="${isEdit ? (existingItem.category || 'Meals') : 'Meals'}" placeholder="e.g. Meals & Thali, Snacks, Pulav" 
+            style="width:100%; height:38px; padding:0 12px; border-radius:8px; border:1px solid var(--border); box-sizing:border-box; font-size:13.5px;">
           <datalist id="dishCategoryList">
-            <option value="Pulav & Biryani">
             <option value="Meals & Thali">
+            <option value="Pulav & Biryani">
             <option value="Snacks">
+            <option value="Pizza & Italian">
             <option value="Fast Food">
             <option value="Starters">
             <option value="Combos">
             <option value="Beverages">
             <option value="Desserts">
           </datalist>
+          <div style="display:flex; gap:5px; flex-wrap:wrap; margin-top:6px;">
+            ${['Meals & Thali', 'Snacks', 'Pulav & Biryani', 'Pizza', 'Fast Food', 'Starters', 'Beverages'].map(c => `
+              <button type="button" class="btn-secondary quick-cat-chip" data-cat="${c}" style="font-size:11px; padding:2px 8px; border-radius:999px;">${c}</button>
+            `).join('')}
+          </div>
+        </div>
+
+        <div style="display:flex; gap:12px; margin-bottom:12px;">
+          <div style="flex:1;">
+            <label style="display:block; font-size:12.5px; font-weight:700; margin-bottom:4px;">Price (₹) *</label>
+            <input type="number" id="dishPrice" required min="1" step="1" value="${isEdit ? existingItem.price : ''}" placeholder="e.g. 180" 
+              style="width:100%; height:38px; padding:0 12px; border-radius:8px; border:1px solid var(--border); box-sizing:border-box; font-size:13.5px; font-weight:700;">
+          </div>
+          <div style="flex:1;">
+            <label style="display:block; font-size:12.5px; font-weight:700; margin-bottom:4px;">Food Diet Type</label>
+            <div style="height:38px; display:flex; align-items:center; gap:6px; padding:0 10px; background:var(--surface-alt); border-radius:8px; border:1px solid var(--border); font-size:12px; font-weight:700; color:#15803d;">
+              ${typeof Icons !== 'undefined' ? Icons.veg(13) : ''} 100% Pure Veg
+            </div>
+          </div>
         </div>
 
         <div style="margin-bottom:14px;">
-          <label style="display:block; font-size:13px; font-weight:700; margin-bottom:4px;">Price (₹)</label>
-          <input type="number" id="dishPrice" required min="1" step="1" value="${isEdit ? existingItem.price : ''}" placeholder="e.g. 140" style="width:100%; height:38px; padding:0 12px; border-radius:8px; border:1px solid var(--border); box-sizing:border-box; font-size:13.5px;">
+          <label style="display:block; font-size:12.5px; font-weight:700; margin-bottom:4px;">Dish Description & Taste Notes</label>
+          <textarea id="dishDescription" rows="2" placeholder="e.g. Prepared fresh with aromatic Gujarati spices, served with fresh accompaniment." 
+            style="width:100%; padding:8px 12px; border-radius:8px; border:1px solid var(--border); box-sizing:border-box; font-size:13px; font-family:inherit; resize:vertical;">${isEdit ? (existingItem.description || '') : ''}</textarea>
         </div>
 
-        <div style="margin-bottom:16px; padding:10px; background:var(--surface-alt); border-radius:8px; display:flex; align-items:center; justify-content:space-between;">
+        <div style="margin-bottom:16px; padding:10px 12px; background:var(--surface-alt); border-radius:8px; display:flex; align-items:center; justify-content:space-between; border:1px solid var(--border);">
           <div>
-            <div style="font-weight:700; font-size:12.5px;">Availability</div>
-            <div style="font-size:11.5px; color:var(--ink-secondary);">Available for immediate orders</div>
+            <div style="font-weight:700; font-size:12.5px;">Live Kitchen Availability</div>
+            <div style="font-size:11.5px; color:var(--ink-secondary);">Available immediately on customer menus</div>
           </div>
           <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-weight:700; font-size:12.5px;">
             <input type="checkbox" id="dishAvailable" ${!isEdit || existingItem.is_available ? 'checked' : ''} style="width:16px; height:16px; accent-color:var(--primary);">
@@ -752,7 +891,7 @@ function renderDishFormModal(existingItem = null, onSuccess = () => {}) {
 
         <div style="display:flex; gap:10px; justify-content:flex-end;">
           <button type="button" class="btn-secondary" id="cancelDishFormBtn" style="padding:8px 14px; font-size:12.5px;">Cancel</button>
-          <button type="submit" class="btn-primary" id="saveDishSubmitBtn" style="padding:8px 18px; font-size:12.5px; font-weight:700;">${isEdit ? 'Save Changes' : 'Add Dish'}</button>
+          <button type="submit" class="btn-primary" id="saveDishSubmitBtn" style="padding:8px 20px; font-size:12.5px; font-weight:700;">${isEdit ? 'Save Changes' : 'Add Dish to Menu'}</button>
         </div>
       </form>
     </div>
@@ -763,12 +902,19 @@ function renderDishFormModal(existingItem = null, onSuccess = () => {}) {
   overlay.querySelector('#closeDishFormModal').addEventListener('click', closeForm);
   overlay.querySelector('#cancelDishFormBtn').addEventListener('click', closeForm);
 
+  overlay.querySelectorAll('.quick-cat-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      overlay.querySelector('#dishCategory').value = chip.dataset.cat;
+    });
+  });
+
   overlay.querySelector('#dishForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = overlay.querySelector('#saveDishSubmitBtn');
     const name = overlay.querySelector('#dishName').value.trim();
     const category = overlay.querySelector('#dishCategory').value.trim();
     const price = Number(overlay.querySelector('#dishPrice').value);
+    const description = overlay.querySelector('#dishDescription').value.trim();
     const is_available = overlay.querySelector('#dishAvailable').checked ? 1 : 0;
 
     try {
@@ -776,10 +922,10 @@ function renderDishFormModal(existingItem = null, onSuccess = () => {}) {
       btn.textContent = 'Saving...';
 
       if (isEdit) {
-        await API.patch(`/api/menu-items/${existingItem.id}`, { name, category, price, is_available });
+        await API.patch(`/api/menu-items/${existingItem.id}`, { name, category, price, is_available, description });
         toast(`Updated "${name}" successfully!`, 'success');
       } else {
-        await API.post(`/api/restaurants/${state.activeRestaurantId}/menu`, { name, category, price, is_available });
+        await API.post(`/api/restaurants/${state.activeRestaurantId}/menu`, { name, category, price, is_available, description });
         toast(`Added "${name}" to your menu!`, 'success');
       }
 
@@ -788,7 +934,7 @@ function renderDishFormModal(existingItem = null, onSuccess = () => {}) {
     } catch (err) {
       toast(err.message, 'error');
       btn.disabled = false;
-      btn.textContent = isEdit ? 'Save Changes' : 'Add Dish';
+      btn.textContent = isEdit ? 'Save Changes' : 'Add Dish to Menu';
     }
   });
 }

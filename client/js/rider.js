@@ -242,6 +242,37 @@ function render() {
           </div>
         </div>
 
+        <!-- Live Route & GPS Simulation Box -->
+        <div class="rider-map-box">
+          <div id="riderTripMap_${o.id}" class="rider-trip-map"></div>
+          <div class="rider-sim-bar">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <button id="simRideToggleBtn" class="btn-primary" style="padding:6px 14px; font-size:12px; display:inline-flex; align-items:center; gap:6px; border-radius:999px;">
+                <span id="simRideIcon">▶</span>
+                <span id="simRideLabel">Simulate Ride</span>
+              </button>
+              <button id="simRideResetBtn" class="btn-secondary" style="padding:6px 10px; font-size:12px; border-radius:999px;" title="Reset position to Kitchen">
+                ↺ Reset
+              </button>
+              <div style="display:inline-flex; border:1px solid var(--border); border-radius:999px; overflow:hidden;">
+                <button class="sim-speed-btn active" data-speed="1" style="padding:4px 9px; font-size:11px; border:none; background:var(--primary); color:#fff; cursor:pointer; font-weight:700;">1x</button>
+                <button class="sim-speed-btn" data-speed="2" style="padding:4px 9px; font-size:11px; border:none; background:transparent; cursor:pointer; font-weight:700;">2x</button>
+                <button class="sim-speed-btn" data-speed="4" style="padding:4px 9px; font-size:11px; border:none; background:transparent; cursor:pointer; font-weight:700;">4x</button>
+              </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <button id="realGpsBtn" class="btn-secondary" style="padding:6px 12px; font-size:12px; display:inline-flex; align-items:center; gap:5px; border-radius:999px;" title="Stream real phone GPS">
+                ${typeof Icons !== 'undefined' ? Icons.navigation(12) : ''}
+                <span id="realGpsLabel">Use Real GPS</span>
+              </button>
+              <span id="simProgressBadge" style="font-size:11.5px; font-weight:700; color:var(--ink-secondary);">0% en route</span>
+            </div>
+            <div class="sim-progress-track">
+              <div id="simProgressFill" class="sim-progress-fill" style="width:0%;"></div>
+            </div>
+          </div>
+        </div>
+
         <!-- Action Step Progression -->
         <div>
           ${o.status === 'ASSIGNED' ? `
@@ -320,6 +351,13 @@ function render() {
   if (otpBtn) {
     otpBtn.addEventListener('click', () => renderVerifyOtpModal(otpBtn.dataset.id));
   }
+
+  if (state.orders.length) {
+    const activeOrder = state.orders[0];
+    if (['ASSIGNED', 'PICKED_UP', 'OUT_FOR_DELIVERY'].includes(activeOrder.status)) {
+      setTimeout(() => initRiderTripMap(activeOrder), 60);
+    }
+  }
 }
 
 function renderVerifyOtpModal(orderId) {
@@ -376,6 +414,264 @@ function renderVerifyOtpModal(orderId) {
       toast(err.message, 'error');
     }
   });
+}
+
+// ----------------------------------------------------
+// LIVE TRIP ROUTE & GPS SIMULATION ENGINE
+// ----------------------------------------------------
+let riderMapInstance = null;
+let riderMarkerInstance = null;
+let riderRouteCoords = [];
+let simInterval = null;
+let simIndex = 0;
+let simSpeedMultiplier = 1;
+let realGpsWatchId = null;
+
+function calculateHeading(lat1, lon1, lat2, lon2) {
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const y = Math.sin(dLon) * Math.cos(lat2 * Math.PI / 180);
+  const x = Math.cos(lat1 * Math.PI / 180) * Math.sin(lat2 * Math.PI / 180) -
+            Math.sin(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.cos(dLon);
+  let brng = Math.atan2(y, x) * 180 / Math.PI;
+  return (brng + 360) % 360;
+}
+
+async function initRiderTripMap(order) {
+  const mapEl = document.getElementById(`riderTripMap_${order.id}`);
+  if (!mapEl || typeof L === 'undefined') return;
+
+  if (simInterval) {
+    clearInterval(simInterval);
+    simInterval = null;
+  }
+
+  if (riderMapInstance) {
+    try { riderMapInstance.remove(); } catch (e) {}
+  }
+
+  const restLat = Number(order.restaurant_lat) || 22.5532;
+  const restLng = Number(order.restaurant_lng) || 72.9485;
+  const destLat = Number(order.dest_lat) || 22.5590;
+  const destLng = Number(order.dest_lng) || 72.9570;
+
+  riderMapInstance = L.map(mapEl.id, { zoomControl: false }).setView([restLat, restLng], 14);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 18,
+    attribution: '© OpenStreetMap'
+  }).addTo(riderMapInstance);
+
+  // Restaurant Marker
+  const restIcon = L.divIcon({
+    className: 'custom-map-pin restaurant',
+    html: typeof Icons !== 'undefined' ? Icons.kitchen(16, '#FFF') : '🍴',
+    iconSize: [30, 30],
+    iconAnchor: [15, 15]
+  });
+  L.marker([restLat, restLng], { icon: restIcon }).addTo(riderMapInstance).bindPopup(`<strong>${order.restaurant_name}</strong>`);
+
+  // Customer Destination Marker
+  const destIcon = L.divIcon({
+    className: 'custom-map-pin destination',
+    html: typeof Icons !== 'undefined' ? Icons.location(16, '#FFF') : '📍',
+    iconSize: [30, 30],
+    iconAnchor: [15, 15]
+  });
+  L.marker([destLat, destLng], { icon: destIcon }).addTo(riderMapInstance).bindPopup(`<strong>${order.customer_name}</strong>`);
+
+  // Real-road route fetching via OSRM
+  riderRouteCoords = [[restLat, restLng], [destLat, destLng]];
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2800);
+    const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${restLng},${restLat};${destLng},${destLat}?overview=full&geometries=geojson`;
+    const res = await fetch(osrmUrl, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.routes && data.routes[0] && data.routes[0].geometry && data.routes[0].geometry.coordinates) {
+        riderRouteCoords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+      }
+    }
+  } catch (e) {
+    const steps = 24;
+    riderRouteCoords = [];
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      riderRouteCoords.push([
+        restLat + (destLat - restLat) * t,
+        restLng + (destLng - restLng) * t
+      ]);
+    }
+  }
+
+  // Draw polyline
+  L.polyline(riderRouteCoords, {
+    color: '#2563EB',
+    weight: 4,
+    opacity: 0.85,
+    lineJoin: 'round'
+  }).addTo(riderMapInstance);
+
+  // Position rider marker
+  const initialPos = riderRouteCoords[simIndex] || [restLat, restLng];
+  const riderIcon = L.divIcon({
+    className: 'custom-map-pin rider',
+    html: `
+      <div class="rider-beacon-pulse"></div>
+      <div class="rider-heading-dir" style="transform: rotate(0deg);">
+        ${typeof Icons !== 'undefined' ? Icons.rider(18, '#FFF') : '🛵'}
+      </div>
+    `,
+    iconSize: [36, 36],
+    iconAnchor: [18, 18]
+  });
+  riderMarkerInstance = L.marker(initialPos, { icon: riderIcon }).addTo(riderMapInstance);
+
+  riderMapInstance.fitBounds(L.latLngBounds(riderRouteCoords), { padding: [30, 30] });
+
+  // Connect Simulation UI Controls
+  const toggleBtn = document.getElementById('simRideToggleBtn');
+  const resetBtn = document.getElementById('simRideResetBtn');
+  const progressFill = document.getElementById('simProgressFill');
+  const progressBadge = document.getElementById('simProgressBadge');
+  const iconSpan = document.getElementById('simRideIcon');
+  const labelSpan = document.getElementById('simRideLabel');
+
+  function updateSimDisplay() {
+    const total = Math.max(1, riderRouteCoords.length - 1);
+    const progress = Math.min(1, simIndex / total);
+    const pct = Math.round(progress * 100);
+    if (progressFill) progressFill.style.width = `${pct}%`;
+    if (progressBadge) progressBadge.textContent = `${pct}% en route`;
+  }
+
+  function broadcastPosition(pos, heading, progress) {
+    const data = {
+      order_id: order.id,
+      rider_id: state.activeRiderId,
+      lat: pos[0],
+      lng: pos[1],
+      heading: Math.round(heading),
+      progress,
+      speed: 26 * simSpeedMultiplier
+    };
+    socket.emit('rider:location', data);
+    API.post(`/api/orders/${order.id}/location`, data).catch(() => {});
+  }
+
+  function stepSimulation() {
+    if (simIndex < riderRouteCoords.length - 1) {
+      simIndex++;
+      const currentPos = riderRouteCoords[simIndex];
+      const prevPos = riderRouteCoords[simIndex - 1] || currentPos;
+      const heading = calculateHeading(prevPos[0], prevPos[1], currentPos[0], currentPos[1]);
+      const progress = simIndex / (riderRouteCoords.length - 1);
+
+      riderMarkerInstance.setLatLng(currentPos);
+      const headingEl = riderMarkerInstance.getElement()?.querySelector('.rider-heading-dir');
+      if (headingEl) headingEl.style.transform = `rotate(${heading}deg)`;
+
+      updateSimDisplay();
+      broadcastPosition(currentPos, heading, progress);
+
+      if (simIndex >= riderRouteCoords.length - 1) {
+        clearInterval(simInterval);
+        simInterval = null;
+        if (iconSpan) iconSpan.textContent = '✓';
+        if (labelSpan) labelSpan.textContent = 'Arrived at Doorstep';
+        AudioFx.play('chime');
+        toast('Doorstep arrived! You can now verify the customer PIN.', 'success');
+      }
+    }
+  }
+
+  if (toggleBtn) {
+    toggleBtn.onclick = () => {
+      if (simInterval) {
+        clearInterval(simInterval);
+        simInterval = null;
+        if (iconSpan) iconSpan.textContent = '▶';
+        if (labelSpan) labelSpan.textContent = 'Resume Ride';
+      } else {
+        if (simIndex >= riderRouteCoords.length - 1) {
+          simIndex = 0;
+        }
+        if (iconSpan) iconSpan.textContent = '⏸';
+        if (labelSpan) labelSpan.textContent = 'Pause Ride';
+        simInterval = setInterval(stepSimulation, Math.max(250, Math.round(1300 / simSpeedMultiplier)));
+      }
+    };
+  }
+
+  if (resetBtn) {
+    resetBtn.onclick = () => {
+      if (simInterval) {
+        clearInterval(simInterval);
+        simInterval = null;
+      }
+      simIndex = 0;
+      riderMarkerInstance.setLatLng(riderRouteCoords[0]);
+      updateSimDisplay();
+      if (iconSpan) iconSpan.textContent = '▶';
+      if (labelSpan) labelSpan.textContent = 'Simulate Ride';
+      broadcastPosition(riderRouteCoords[0], 0, 0);
+      toast('Ride position reset to kitchen.', 'info');
+    };
+  }
+
+  document.querySelectorAll('.sim-speed-btn').forEach(b => {
+    b.onclick = () => {
+      document.querySelectorAll('.sim-speed-btn').forEach(x => {
+        x.style.background = 'transparent';
+        x.style.color = 'var(--ink)';
+      });
+      b.style.background = 'var(--primary)';
+      b.style.color = '#fff';
+      simSpeedMultiplier = Number(b.dataset.speed) || 1;
+      if (simInterval) {
+        clearInterval(simInterval);
+        simInterval = setInterval(stepSimulation, Math.max(250, Math.round(1300 / simSpeedMultiplier)));
+      }
+    };
+  });
+
+  // Real GPS Toggle
+  const realGpsBtn = document.getElementById('realGpsBtn');
+  if (realGpsBtn) {
+    realGpsBtn.onclick = () => {
+      if (realGpsWatchId) {
+        navigator.geolocation.clearWatch(realGpsWatchId);
+        realGpsWatchId = null;
+        realGpsBtn.classList.remove('btn-primary');
+        realGpsBtn.classList.add('btn-secondary');
+        document.getElementById('realGpsLabel').textContent = 'Use Real GPS';
+        toast('Real GPS broadcasting paused.', 'info');
+      } else {
+        if (!navigator.geolocation) {
+          toast('Geolocation not supported on this device.', 'error');
+          return;
+        }
+        realGpsBtn.classList.remove('btn-secondary');
+        realGpsBtn.classList.add('btn-primary');
+        document.getElementById('realGpsLabel').textContent = 'GPS Active ●';
+        toast('Broadcasting live sensor GPS coordinates...', 'success');
+
+        realGpsWatchId = navigator.geolocation.watchPosition((pos) => {
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          const heading = pos.coords.heading || 0;
+          riderMarkerInstance.setLatLng([lat, lng]);
+          riderMapInstance.setView([lat, lng]);
+          broadcastPosition([lat, lng], heading, 0.5);
+        }, (err) => {
+          toast(`GPS Error: ${err.message}`, 'error');
+        }, { enableHighAccuracy: true });
+      }
+    };
+  }
+
+  updateSimDisplay();
 }
 
 init();

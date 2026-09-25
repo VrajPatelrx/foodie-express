@@ -81,11 +81,43 @@ async function runAutoSimulation() {
     AudioFx.play('alert');
     await sleep(2500);
 
-    // 6. Rider out for delivery
-    setStatus('Step 6/6: Delivery partner approaching destination', '#4338CA', '#fff');
+    // 6. Rider out for delivery with animated live road movement
+    setStatus('Step 6/6: Delivery partner approaching destination · Live GPS streaming', '#4338CA', '#fff');
     await API.patch(`/api/orders/${order.id}/status`, { status: 'OUT_FOR_DELIVERY', note: 'Rider approaching customer location' });
     AudioFx.play('alert');
-    await sleep(3500);
+
+    // Smoothly stream GPS telemetry waypoints from restaurant to customer destination
+    const restLat = Number(rest.lat) || 22.5532;
+    const restLng = Number(rest.lng) || 72.9485;
+    const destLat = 22.5590;
+    const destLng = 72.9570;
+    const gpsSteps = 8;
+
+    for (let i = 1; i <= gpsSteps; i++) {
+      const progress = i / gpsSteps;
+      const lat = restLat + (destLat - restLat) * progress;
+      const lng = restLng + (destLng - restLng) * progress;
+      const heading = 42;
+      const speed = Math.round(24 + Math.random() * 8);
+
+      const locPayload = {
+        order_id: order.id,
+        rider_id: 1,
+        lat,
+        lng,
+        heading,
+        progress,
+        speed
+      };
+
+      if (typeof socket !== 'undefined' && socket.emit) {
+        socket.emit('rider:location', locPayload);
+      }
+      API.post(`/api/orders/${order.id}/location`, locPayload).catch(() => {});
+
+      setStatus(`Step 6/6: Rider is en route (${Math.round(progress * 100)}% · ${speed} km/h)`, '#2563EB', '#fff');
+      await sleep(600);
+    }
 
     // 7. Verify Delivery PIN and complete
     setStatus('Final Step: Verifying Customer PIN...', '#16A34A', '#fff');

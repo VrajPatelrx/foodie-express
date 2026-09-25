@@ -16,6 +16,7 @@ let state = {
   searchQuery: '',
   selectedCategory: 'All',
   appliedCoupon: null, // { code, discount, freeDelivery, description }
+  availableCoupons: [], // Active promo coupons loaded dynamically from database
   paymentMethod: 'UPI',
   customerName: (currentUser && currentUser.name) || localStorage.getItem('fe_customer_name') || 'Vraj Patel',
   customerPhone: (currentUser && currentUser.phone) || localStorage.getItem('fe_customer_phone') || '9876543210',
@@ -28,6 +29,8 @@ let state = {
   mapInstance: null,
   riderMarker: null,
   routePolyline: null,
+  hasNotifiedArrival: false,
+  latestRiderLoc: null,
   allOrders: [],
 };
 
@@ -206,6 +209,63 @@ function getFinalPayable() {
   return Math.max(0, sub + fee - disc);
 }
 
+// Active checkout modal refresh reference for live coupon updates
+let activeCheckoutModalRefresh = null;
+
+function formatCouponChipLabel(c) {
+  let badge = c.code;
+  if (c.discount_type === 'PERCENT') {
+    badge += ` (${c.discount_value}% OFF)`;
+  } else if (c.discount_type === 'FLAT') {
+    badge += ` (₹${c.discount_value} OFF)`;
+  } else if (c.discount_type === 'DELIVERY') {
+    badge += ` (Free Delivery)`;
+  }
+  return badge;
+}
+
+function renderCouponChipsHtml() {
+  const coupons = (state.availableCoupons && state.availableCoupons.length > 0)
+    ? state.availableCoupons
+    : [
+      { code: 'WELCOME50', discount_type: 'PERCENT', discount_value: 50, description: '50% off up to ₹100' },
+      { code: 'FREEDEL', discount_type: 'DELIVERY', discount_value: 25, description: 'Free Delivery (₹25 off)' },
+      { code: 'FLAT20', discount_type: 'FLAT', discount_value: 20, description: 'Flat ₹20 discount' }
+    ];
+
+  return coupons.map(c => {
+    const badge = formatCouponChipLabel(c);
+    let tip = c.description || '';
+    if (c.min_order > 0) {
+      tip += (tip ? ' • ' : '') + `Min order ₹${c.min_order}`;
+    }
+    return `<button type="button" class="coupon-chip" data-code="${c.code}" title="${tip}">${badge}</button>`;
+  }).join('');
+}
+
+async function loadAvailableCoupons() {
+  try {
+    const list = await API.get('/api/coupons');
+    if (Array.isArray(list) && list.length > 0) {
+      state.availableCoupons = list;
+    } else if (!state.availableCoupons || !state.availableCoupons.length) {
+      state.availableCoupons = [
+        { code: 'WELCOME50', discount_type: 'PERCENT', discount_value: 50, description: '50% off up to ₹100' },
+        { code: 'FREEDEL', discount_type: 'DELIVERY', discount_value: 25, description: 'Free Delivery (₹25 off)' },
+        { code: 'FLAT20', discount_type: 'FLAT', discount_value: 20, description: 'Flat ₹20 discount' }
+      ];
+    }
+  } catch (e) {
+    if (!state.availableCoupons || !state.availableCoupons.length) {
+      state.availableCoupons = [
+        { code: 'WELCOME50', discount_type: 'PERCENT', discount_value: 50, description: '50% off up to ₹100' },
+        { code: 'FREEDEL', discount_type: 'DELIVERY', discount_value: 25, description: 'Free Delivery (₹25 off)' },
+        { code: 'FLAT20', discount_type: 'FLAT', discount_value: 20, description: 'Flat ₹20 discount' }
+      ];
+    }
+  }
+}
+
 function updateFloatingCart() {
   const bar = document.getElementById('floatingCart');
   if (!bar) return;
@@ -298,7 +358,8 @@ async function init() {
   try {
     const [restaurants, addresses] = await Promise.all([
       API.get('/api/restaurants'),
-      API.get(`/api/customer/addresses?user_id=${currentUser ? currentUser.id : 1}`).catch(() => [])
+      API.get(`/api/customer/addresses?user_id=${currentUser ? currentUser.id : 1}`).catch(() => []),
+      loadAvailableCoupons()
     ]);
     state.restaurants = restaurants;
     state.savedAddresses = addresses;
@@ -374,6 +435,13 @@ socket.on('order:update', (order) => {
   }
 });
 
+// Live Rider GPS Telemetry Updates
+socket.on('rider:location', (loc) => {
+  if (state.screen === 'tracking' && state.currentOrder && String(loc.order_id) === String(state.currentOrder.id)) {
+    updateLiveRiderMarker(loc);
+  }
+});
+
 // Live Restaurant Profile & Menu Updates
 socket.on('restaurants:update', async () => {
   try {
@@ -396,6 +464,14 @@ socket.on('menu:update', async (data) => {
       }
     }
   } catch (e) { }
+});
+
+// Real-time promo coupon updates from Admin
+socket.on('coupons:update', async () => {
+  await loadAvailableCoupons();
+  if (typeof activeCheckoutModalRefresh === 'function') {
+    activeCheckoutModalRefresh();
+  }
 });
 
 // ----------------------------------------------------
@@ -657,7 +733,30 @@ function openCheckoutModal() {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
 
+  activeCheckoutModalRefresh = () => {
+    if (document.body.contains(overlay)) {
+      renderModalContent();
+    }
+  };
+
+  // Re-fetch latest active coupons in background to guarantee brand new promo codes show instantly
+  loadAvailableCoupons().then(() => {
+    if (typeof activeCheckoutModalRefresh === 'function' && !state.appliedCoupon) {
+      activeCheckoutModalRefresh();
+    }
+  }).catch(() => {});
+
   function renderModalContent() {
+    // Preserve any existing typed inputs before updating innerHTML
+    const nameInput = overlay.querySelector('#cName');
+    if (nameInput) state.customerName = nameInput.value;
+    const phoneInput = overlay.querySelector('#cPhone');
+    if (phoneInput) state.customerPhone = phoneInput.value;
+    const addrInput = overlay.querySelector('#cAddr');
+    if (addrInput) state.customerAddress = addrInput.value;
+    const couponInput = overlay.querySelector('#couponCodeInput');
+    const existingTypedCoupon = couponInput ? couponInput.value : '';
+
     const subtotal = cartSubtotal();
     const fee = getDeliveryFee();
     const discount = getDiscountAmount();
@@ -724,7 +823,7 @@ function openCheckoutModal() {
             ${Icons.discount(14)} Apply Promo Coupon
           </label>
           <div class="coupon-box" style="margin:6px 0 8px;">
-            <input type="text" id="couponCodeInput" class="coupon-input" placeholder="Enter code (e.g. WELCOME50)" value="${state.appliedCoupon ? state.appliedCoupon.code : ''}" ${state.appliedCoupon ? 'disabled' : ''}>
+            <input type="text" id="couponCodeInput" class="coupon-input" placeholder="Enter code (e.g. WELCOME50)" value="${state.appliedCoupon ? state.appliedCoupon.code : (existingTypedCoupon || '')}" ${state.appliedCoupon ? 'disabled' : ''}>
             ${state.appliedCoupon ? `
               <button type="button" id="removeCouponBtn" class="coupon-btn" style="background:var(--red);">Remove</button>
             ` : `
@@ -737,10 +836,11 @@ function openCheckoutModal() {
               ${Icons.check(13)} Coupon ${state.appliedCoupon.code} applied! Saved ₹${state.appliedCoupon.discount}
             </div>
           ` : `
-            <div style="display:flex; gap:6px; flex-wrap:wrap;">
-              <button type="button" class="coupon-chip" data-code="WELCOME50">WELCOME50 (50% OFF)</button>
-              <button type="button" class="coupon-chip" data-code="FREEDEL">FREEDEL (Free Delivery)</button>
-              <button type="button" class="coupon-chip" data-code="FLAT20">FLAT20 (₹20 OFF)</button>
+            <div>
+              <div style="font-size:11px; color:var(--ink-secondary); margin-bottom:6px; font-weight:700;">Available Coupons (Tap to Apply):</div>
+              <div id="checkoutCouponChips" style="display:flex; gap:6px; flex-wrap:wrap; max-height:120px; overflow-y:auto; padding:2px 0;">
+                ${renderCouponChipsHtml()}
+              </div>
             </div>
           `}
         </div>
@@ -830,6 +930,7 @@ function openCheckoutModal() {
 
   function bindModalEvents() {
     const close = () => {
+      activeCheckoutModalRefresh = null;
       overlay.remove();
       document.body.classList.remove('modal-open');
     };
@@ -1049,6 +1150,7 @@ function openCheckoutModal() {
         state.currentOrder = order;
         state.cart = {};
         state.appliedCoupon = null;
+        activeCheckoutModalRefresh = null;
 
         overlay.remove();
         document.body.classList.remove('modal-open');
@@ -1667,9 +1769,22 @@ function renderTracking(order) {
       </span>
     </div>
 
-    <!-- Live Map Container -->
-    <div class="card map-container" style="margin-bottom:18px; padding:0; overflow:hidden; border:2px solid var(--border);">
-      <div id="trackingMap" style="width:100%; height:270px; background:var(--surface-alt);"></div>
+    <!-- Live Map Container with Telemetry HUD -->
+    <div class="card map-container" style="margin-bottom:18px; padding:0; overflow:hidden; border:2px solid var(--border); position:relative;">
+      <div id="liveGpsHud" class="live-gps-hud" style="display:none;">
+        <span class="live-gps-dot"></span>
+        <span class="live-gps-item"><strong id="hudStatusText">LIVE GPS</strong></span>
+        <span class="live-gps-sep"></span>
+        <span class="live-gps-item" id="hudEtaItem">ETA: <strong id="hudEtaText">~4 mins</strong></span>
+        <span class="live-gps-sep"></span>
+        <span class="live-gps-item" id="hudSpeedItem"><strong id="hudSpeedText">26 km/h</strong></span>
+      </div>
+
+      <div id="trackingMap" style="width:100%; height:280px; background:var(--surface-alt);"></div>
+
+      <button id="recenterRiderBtn" class="btn-secondary" style="display:none; position:absolute; bottom:12px; right:12px; z-index:1000; padding:6px 12px; font-size:11px; background:rgba(255,255,255,0.92); backdrop-filter:blur(6px); border-radius:999px; box-shadow:0 2px 8px rgba(0,0,0,0.18); align-items:center; gap:5px; cursor:pointer; font-weight:700;">
+        ${Icons.navigation(12, 'var(--primary)')} Recenter Rider
+      </button>
     </div>
 
     <!-- Active Delivery Status Card -->
@@ -1794,11 +1909,14 @@ function renderTracking(order) {
 }
 
 // ----------------------------------------------------
-// 9. LEAFLET MAP WITH REAL-ROAD OSRM ROUTING
+// 9. LEAFLET MAP WITH REAL-ROAD OSRM ROUTING & LIVE GPS
 // ----------------------------------------------------
 async function initTrackingMap(order) {
   const mapEl = document.getElementById('trackingMap');
   if (!mapEl || typeof L === 'undefined') return;
+
+  state.hasNotifiedArrival = false;
+  socket.emit('join', `order:${order.id}`);
 
   const restLat = Number(order.restaurant_lat) || 22.5532;
   const restLng = Number(order.restaurant_lng) || 72.9485;
@@ -1834,7 +1952,7 @@ async function initTrackingMap(order) {
   });
   L.marker([destLat, destLng], { icon: destIcon }).addTo(state.mapInstance).bindPopup("Delivery Address");
 
-  // Determine rider progress ratio
+  // Determine baseline progress ratio
   let progressRatio = 0;
   if (['ASSIGNED', 'READY'].includes(order.status)) progressRatio = 0.05;
   else if (order.status === 'PICKED_UP') progressRatio = 0.35;
@@ -1853,12 +1971,20 @@ async function initTrackingMap(order) {
     if (res.ok) {
       const data = await res.json();
       if (data.routes && data.routes[0] && data.routes[0].geometry && data.routes[0].geometry.coordinates) {
-        // GeoJSON coords are [lng, lat], convert to Leaflet [lat, lng]
         routeCoords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
       }
     }
   } catch (e) {
-    // Offline or slow network: fallback to straight line
+    // Offline or fallback: generate interpolated points
+    const steps = 20;
+    routeCoords = [];
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      routeCoords.push([
+        restLat + (destLat - restLat) * t,
+        restLng + (destLng - restLng) * t
+      ]);
+    }
   }
 
   // Draw smooth polyline
@@ -1869,23 +1995,125 @@ async function initTrackingMap(order) {
     lineJoin: 'round'
   }).addTo(state.mapInstance);
 
+  // Check if live tracking coordinate telemetry already exists
+  let liveLoc = null;
+  try {
+    const trackingRes = await API.get(`/api/orders/${order.id}/live-tracking`);
+    if (trackingRes && trackingRes.live_location) {
+      liveLoc = trackingRes.live_location;
+    }
+  } catch (e) { }
+
   // Position rider along the route
   const targetIndex = Math.min(routeCoords.length - 1, Math.floor(routeCoords.length * progressRatio));
-  const riderPos = routeCoords[targetIndex] || [restLat, restLng];
+  let riderPos = liveLoc ? [liveLoc.lat, liveLoc.lng] : (routeCoords[targetIndex] || [restLat, restLng]);
+  let initialHeading = liveLoc ? liveLoc.heading : 0;
 
   if (['ASSIGNED', 'PICKED_UP', 'OUT_FOR_DELIVERY', 'DELIVERED'].includes(order.status)) {
     const riderIcon = L.divIcon({
       className: 'custom-map-pin rider',
-      html: Icons.rider(18, '#FFF'),
-      iconSize: [34, 34],
-      iconAnchor: [17, 17]
+      html: `
+        <div class="rider-beacon-pulse"></div>
+        <div class="rider-heading-dir" style="transform: rotate(${initialHeading}deg);">
+          ${Icons.rider(18, '#FFF')}
+        </div>
+      `,
+      iconSize: [36, 36],
+      iconAnchor: [18, 18]
     });
     state.riderMarker = L.marker(riderPos, { icon: riderIcon }).addTo(state.mapInstance);
+
+    const recenterBtn = document.getElementById('recenterRiderBtn');
+    if (recenterBtn) {
+      recenterBtn.style.display = 'inline-flex';
+      recenterBtn.onclick = () => {
+        if (state.riderMarker && state.mapInstance) {
+          state.mapInstance.setView(state.riderMarker.getLatLng(), 16, { animate: true });
+        }
+      };
+    }
+
+    if (['PICKED_UP', 'OUT_FOR_DELIVERY'].includes(order.status)) {
+      const hud = document.getElementById('liveGpsHud');
+      if (hud) {
+        hud.style.display = 'flex';
+        const speedText = document.getElementById('hudSpeedText');
+        if (speedText) speedText.textContent = `${Math.round(liveLoc?.speed || 24)} km/h`;
+        const etaText = document.getElementById('hudEtaText');
+        if (etaText) {
+          const rem = Math.max(1, Math.round((1 - (liveLoc?.progress || progressRatio)) * 8));
+          etaText.textContent = `~${rem} min${rem > 1 ? 's' : ''}`;
+        }
+      }
+    }
   }
 
   // Fit bounds to show both restaurant and customer comfortably
   const bounds = L.latLngBounds(routeCoords);
   state.mapInstance.fitBounds(bounds, { padding: [35, 35] });
+}
+
+function updateLiveRiderMarker(loc) {
+  if (!state.mapInstance) return;
+  const lat = Number(loc.lat);
+  const lng = Number(loc.lng);
+  if (isNaN(lat) || isNaN(lng)) return;
+
+  state.latestRiderLoc = loc;
+
+  const riderIconHtml = `
+    <div class="rider-beacon-pulse"></div>
+    <div class="rider-heading-dir" style="transform: rotate(${loc.heading || 0}deg);">
+      ${Icons.rider(18, '#FFF')}
+    </div>
+  `;
+
+  if (!state.riderMarker) {
+    const riderIcon = L.divIcon({
+      className: 'custom-map-pin rider',
+      html: riderIconHtml,
+      iconSize: [36, 36],
+      iconAnchor: [18, 18]
+    });
+    state.riderMarker = L.marker([lat, lng], { icon: riderIcon }).addTo(state.mapInstance);
+  } else {
+    // Leaflet marker will smoothly glide across screen due to CSS transition on .custom-map-pin.rider
+    state.riderMarker.setLatLng([lat, lng]);
+    const headingEl = state.riderMarker.getElement()?.querySelector('.rider-heading-dir');
+    if (headingEl && loc.heading !== undefined) {
+      headingEl.style.transform = `rotate(${loc.heading}deg)`;
+    }
+  }
+
+  const recenterBtn = document.getElementById('recenterRiderBtn');
+  if (recenterBtn) recenterBtn.style.display = 'inline-flex';
+
+  // Update Live GPS Telemetry HUD
+  const hud = document.getElementById('liveGpsHud');
+  if (hud) {
+    hud.style.display = 'flex';
+    const speedText = document.getElementById('hudSpeedText');
+    if (speedText) speedText.textContent = `${Math.round(loc.speed || 24)} km/h`;
+
+    const etaText = document.getElementById('hudEtaText');
+    if (etaText) {
+      const progress = loc.progress || 0;
+      const remainingMinutes = Math.max(1, Math.round((1 - progress) * 8));
+      etaText.textContent = `~${remainingMinutes} min${remainingMinutes > 1 ? 's' : ''}`;
+    }
+
+    const statusText = document.getElementById('hudStatusText');
+    if (statusText) {
+      statusText.textContent = loc.progress >= 0.95 ? 'ARRIVING NOW' : 'LIVE GPS';
+    }
+  }
+
+  // Doorstep arrival audio and toast notification
+  if (loc.progress >= 0.95 && !state.hasNotifiedArrival) {
+    state.hasNotifiedArrival = true;
+    AudioFx.play('chime');
+    toast('🛵 Your delivery partner has arrived at your doorstep!', 'info');
+  }
 }
 
 function celebrateDelivery() {

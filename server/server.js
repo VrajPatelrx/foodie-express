@@ -115,6 +115,7 @@ function requireRole(allowedRoles) {
 const loginRateMap = new Map();
 const otpAttemptMap = new Map();
 const geoRateMap = new Map();
+const liveRiderLocations = new Map(); // orderId / riderId -> live coordinate telemetry
 
 function isRateLimited(map, key, maxRequests, windowMs) {
   const now = Date.now();
@@ -605,9 +606,10 @@ app.post('/api/restaurants/:id/menu', authenticateUser, requireRole(['VENDOR', '
   const rest = db.prepare('SELECT id FROM restaurants WHERE id = ?').get(restId);
   if (!rest) return res.status(404).json({ error: 'Restaurant not found' });
 
-  const { name, category, price, is_available } = req.body;
+  const { name, category, price, is_available, description } = req.body;
   const cleanName = sanitizeText(String(name || ''));
   const cleanCategory = sanitizeText(String(category || 'Specialties'));
+  const cleanDesc = sanitizeText(String(description || ''));
   const numPrice = Number(price);
 
   if (!cleanName || cleanName.length < 2) {
@@ -619,10 +621,10 @@ app.post('/api/restaurants/:id/menu', authenticateUser, requireRole(['VENDOR', '
 
   const avail = is_available === 0 ? 0 : 1;
   const insert = db.prepare(`
-    INSERT INTO menu_items (restaurant_id, name, category, price, veg, is_available)
-    VALUES (?, ?, ?, ?, 1, ?)
+    INSERT INTO menu_items (restaurant_id, name, category, price, veg, is_available, description)
+    VALUES (?, ?, ?, ?, 1, ?, ?)
   `);
-  const info = insert.run(restId, cleanName, cleanCategory, numPrice, avail);
+  const info = insert.run(restId, cleanName, cleanCategory, numPrice, avail, cleanDesc);
 
   const newItem = {
     id: info.lastInsertRowid,
@@ -631,7 +633,8 @@ app.post('/api/restaurants/:id/menu', authenticateUser, requireRole(['VENDOR', '
     category: cleanCategory,
     price: numPrice,
     veg: 1,
-    is_available: avail
+    is_available: avail,
+    description: cleanDesc
   };
 
   io.emit('menu:update', { restaurant_id: Number(restId) });
@@ -644,9 +647,10 @@ app.patch('/api/menu-items/:id', authenticateUser, requireRole(['VENDOR', 'ADMIN
   const item = db.prepare('SELECT * FROM menu_items WHERE id = ?').get(req.params.id);
   if (!item) return res.status(404).json({ error: 'Dish not found' });
 
-  const { name, category, price, is_available } = req.body;
+  const { name, category, price, is_available, description } = req.body;
   const cleanName = name !== undefined ? sanitizeText(String(name)) : item.name;
   const cleanCat = category !== undefined ? sanitizeText(String(category)) : item.category;
+  const cleanDesc = description !== undefined ? sanitizeText(String(description)) : (item.description || '');
   const numPrice = price !== undefined ? Number(price) : item.price;
   const avail = is_available !== undefined ? (is_available ? 1 : 0) : item.is_available;
 
@@ -659,9 +663,9 @@ app.patch('/api/menu-items/:id', authenticateUser, requireRole(['VENDOR', 'ADMIN
 
   db.prepare(`
     UPDATE menu_items
-    SET name = ?, category = ?, price = ?, is_available = ?
+    SET name = ?, category = ?, price = ?, is_available = ?, description = ?
     WHERE id = ?
-  `).run(cleanName, cleanCat, numPrice, avail, item.id);
+  `).run(cleanName, cleanCat, numPrice, avail, cleanDesc, item.id);
 
   const updated = db.prepare('SELECT * FROM menu_items WHERE id = ?').get(item.id);
   io.emit('menu:update', { restaurant_id: item.restaurant_id });
@@ -690,10 +694,46 @@ app.patch('/api/menu-items/:id/toggle', authenticateUser, requireRole(['VENDOR',
 });
 
 // ---------- COUPONS & RATINGS ----------
+// Public Active Coupons (for Customer Checkout & Promotions)
+app.get('/api/coupons', (req, res) => {
+  try {
+    const activeCoupons = db.prepare(`
+      SELECT id, code, discount_type, discount_value, max_discount, min_order, description 
+      FROM coupons 
+      WHERE is_active = 1 
+      ORDER BY id DESC
+    `).all();
+    res.json(activeCoupons);
+  } catch (e) {
+    res.json([]);
+  }
+});
+
 app.post('/api/coupons/apply', (req, res) => {
   const { code, subtotal } = req.body;
   const cleanCode = String(code || '').trim().toUpperCase();
   const sub = Number(subtotal) || 0;
+
+  try {
+    const cp = db.prepare('SELECT * FROM coupons WHERE UPPER(code) = ? AND is_active = 1').get(cleanCode);
+    if (cp) {
+      if (cp.min_order && sub < cp.min_order) {
+        return res.status(400).json({ error: `Minimum order of ₹${cp.min_order} required for ${cp.code}.` });
+      }
+      let discount = 0;
+      let freeDelivery = false;
+      if (cp.discount_type === 'PERCENT') {
+        discount = Math.min(cp.max_discount || 100, Math.round(sub * (cp.discount_value / 100)));
+      } else if (cp.discount_type === 'FLAT') {
+        discount = Math.min(sub, cp.discount_value);
+      } else if (cp.discount_type === 'DELIVERY') {
+        discount = 25;
+        freeDelivery = true;
+      }
+      return res.json({ success: true, code: cp.code, discount, freeDelivery, description: cp.description || `${cp.code} applied` });
+    }
+  } catch (e) {}
+
   if (cleanCode === 'WELCOME50') {
     const discount = Math.min(100, Math.round(sub * 0.5));
     return res.json({ success: true, code: 'WELCOME50', discount, description: '50% off up to ₹100' });
@@ -964,6 +1004,66 @@ app.patch('/api/riders/:id/status', authenticateUser, requireRole(['RIDER', 'ADM
   res.json({ success: true, status });
 });
 
+// ---------- LIVE RIDER GPS TRACKING ----------
+app.get('/api/orders/:id/live-tracking', (req, res) => {
+  const orderId = Number(req.params.id);
+  const order = getFullOrder(orderId);
+  if (!order) return res.status(404).json({ error: 'Order not found' });
+
+  const live = liveRiderLocations.get(orderId) || (order.rider_id ? liveRiderLocations.get(`rider_${order.rider_id}`) : null);
+
+  res.json({
+    order_id: order.id,
+    status: order.status,
+    rider_id: order.rider_id,
+    rider_name: order.rider_name,
+    rider_phone: order.rider_phone,
+    restaurant: {
+      name: order.restaurant_name,
+      lat: Number(order.restaurant_lat) || 22.5532,
+      lng: Number(order.restaurant_lng) || 72.9485,
+    },
+    destination: {
+      address: order.customer_address,
+      lat: Number(order.dest_lat) || 22.5590,
+      lng: Number(order.dest_lng) || 72.9570,
+    },
+    live_location: live || null
+  });
+});
+
+app.post('/api/orders/:id/location', (req, res) => {
+  const orderId = Number(req.params.id);
+  const { lat, lng, heading, speed, progress, rider_id } = req.body;
+  if (lat === undefined || lng === undefined || isNaN(Number(lat)) || isNaN(Number(lng))) {
+    return res.status(400).json({ error: 'Invalid coordinates' });
+  }
+
+  const loc = {
+    order_id: orderId,
+    rider_id: Number(rider_id) || null,
+    lat: Number(lat),
+    lng: Number(lng),
+    heading: Number(heading) || 0,
+    progress: Math.min(1, Math.max(0, Number(progress) || 0)),
+    speed: Number(speed) || 24,
+    updated_at: Date.now()
+  };
+
+  liveRiderLocations.set(orderId, loc);
+  if (loc.rider_id) {
+    liveRiderLocations.set(`rider_${loc.rider_id}`, loc);
+    try {
+      db.prepare('UPDATE riders SET lat = ?, lng = ? WHERE id = ?').run(loc.lat, loc.lng, loc.rider_id);
+    } catch (e) {}
+  }
+
+  io.to(`order:${orderId}`).emit('rider:location', loc);
+  io.emit('rider:location', loc);
+
+  res.json({ success: true, location: loc });
+});
+
 // ---------- ADMIN (SECURED) ----------
 app.get('/api/admin/orders', authenticateUser, requireRole(['ADMIN']), (req, res) => {
   const rows = db.prepare('SELECT id FROM orders ORDER BY id DESC').all();
@@ -1021,10 +1121,222 @@ app.get('/api/admin/overview', authenticateUser, requireRole(['ADMIN']), (req, r
   });
 });
 
+// ---------- ADMIN DETAILED ANALYTICS ----------
+app.get('/api/admin/analytics', authenticateUser, requireRole(['ADMIN']), (req, res) => {
+  const totalOrders = db.prepare('SELECT COUNT(*) as c FROM orders').get().c;
+  const activeOrders = db.prepare("SELECT COUNT(*) as c FROM orders WHERE status NOT IN ('DELIVERED','CANCELLED','REJECTED')").get().c;
+  const delivered = db.prepare("SELECT COUNT(*) as c FROM orders WHERE status = 'DELIVERED'").get().c;
+  const cancelled = db.prepare("SELECT COUNT(*) as c FROM orders WHERE status IN ('CANCELLED','REJECTED')").get().c;
+  const revenue = db.prepare("SELECT COALESCE(SUM(total),0) as s FROM orders WHERE status = 'DELIVERED'").get().s;
+
+  const commission = Math.round(revenue * 0.18);
+  const restaurantPayout = Math.round(revenue * 0.82);
+  const totalDeliveryFees = delivered * 25;
+  const riderPayoutTotal = delivered * 35;
+  const platformNetProfit = Math.round(commission + totalDeliveryFees - riderPayoutTotal);
+
+  const aov = delivered > 0 ? Math.round(revenue / delivered) : 0;
+  const fulfillmentRate = totalOrders > 0 ? Math.round((delivered / totalOrders) * 100) : 100;
+
+  // Top Performing Dishes
+  const topDishes = db.prepare(`
+    SELECT oi.name, 
+           COUNT(oi.id) as order_count,
+           SUM(oi.qty) as total_qty,
+           ROUND(SUM(oi.price * oi.qty), 2) as total_sales
+    FROM order_items oi
+    JOIN orders o ON o.id = oi.order_id
+    WHERE o.status != 'CANCELLED'
+    GROUP BY oi.name
+    ORDER BY total_qty DESC
+    LIMIT 6
+  `).all();
+
+  // Restaurant Revenue Rankings
+  const restaurantRankings = db.prepare(`
+    SELECT r.id, r.name, r.cuisine, r.rating, r.is_open,
+           COUNT(o.id) as total_orders,
+           SUM(CASE WHEN o.status = 'DELIVERED' THEN 1 ELSE 0 END) as delivered_count,
+           COALESCE(SUM(CASE WHEN o.status = 'DELIVERED' THEN o.total ELSE 0 END), 0) as total_revenue
+    FROM restaurants r
+    LEFT JOIN orders o ON o.restaurant_id = r.id
+    GROUP BY r.id
+    ORDER BY total_revenue DESC
+  `).all();
+
+  // Rider Fleet Leaderboard
+  const riderLeaderboard = db.prepare(`
+    SELECT rd.id, rd.name, rd.vehicle, rd.rating, rd.status, rd.earnings,
+           COUNT(o.id) as total_trips,
+           SUM(CASE WHEN o.status = 'DELIVERED' THEN 1 ELSE 0 END) as completed_trips
+    FROM riders rd
+    LEFT JOIN orders o ON o.rider_id = rd.id
+    GROUP BY rd.id
+    ORDER BY rd.earnings DESC
+  `).all();
+
+  // Order Status Funnel
+  const statusRows = db.prepare(`
+    SELECT status, COUNT(*) as count 
+    FROM orders 
+    GROUP BY status
+  `).all();
+  const statusBreakdown = {
+    PLACED: 0, ACCEPTED: 0, PREPARING: 0, READY: 0,
+    ASSIGNED: 0, OUT_FOR_DELIVERY: 0, DELIVERED: 0, CANCELLED: 0
+  };
+  for (const s of statusRows) {
+    statusBreakdown[s.status] = s.count;
+  }
+
+  // Time-Series (Last 7 Days)
+  const dailySeries = [];
+  const now = new Date();
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    const dateStr = d.toISOString().slice(0, 10);
+    const dayLabel = i === 0 ? 'Today' : i === 1 ? 'Yesterday' : d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+
+    const stats = db.prepare(`
+      SELECT COUNT(*) as orders,
+             COALESCE(SUM(CASE WHEN status = 'DELIVERED' THEN total ELSE 0 END), 0) as revenue
+      FROM orders
+      WHERE created_at LIKE ?
+    `).get(`${dateStr}%`);
+
+    dailySeries.push({
+      date: dateStr,
+      label: dayLabel,
+      orders: stats ? stats.orders : 0,
+      revenue: stats ? stats.revenue : 0
+    });
+  }
+
+  const totalSeriesRev = dailySeries.reduce((acc, curr) => acc + curr.revenue, 0);
+  if (totalSeriesRev === 0 && revenue > 0) {
+    dailySeries[dailySeries.length - 1].revenue = revenue;
+    dailySeries[dailySeries.length - 1].orders = totalOrders;
+  }
+
+  // Coupon Stats
+  let couponStats = { used_count: 0, total_discounts: 0 };
+  try {
+    couponStats = db.prepare(`
+      SELECT COUNT(*) as used_count,
+             COALESCE(SUM(discount_amount), 0) as total_discounts
+      FROM orders
+      WHERE coupon_code IS NOT NULL
+    `).get();
+  } catch (e) {}
+
+  res.json({
+    kpis: {
+      grossOrderValue: revenue,
+      commission,
+      restaurantPayout,
+      totalDeliveryFees,
+      riderPayoutTotal,
+      platformNetProfit,
+      totalOrders,
+      activeOrders,
+      deliveredOrders: delivered,
+      cancelledOrders: cancelled,
+      averageOrderValue: aov,
+      fulfillmentRate
+    },
+    topDishes,
+    restaurantRankings,
+    riderLeaderboard,
+    statusBreakdown,
+    dailySeries,
+    couponStats
+  });
+});
+
+// ---------- ADMIN COUPON MANAGEMENT ----------
+app.get('/api/admin/coupons', authenticateUser, requireRole(['ADMIN']), (req, res) => {
+  const coupons = db.prepare('SELECT * FROM coupons ORDER BY id DESC').all();
+  res.json(coupons);
+});
+
+app.post('/api/admin/coupons', authenticateUser, requireRole(['ADMIN']), (req, res) => {
+  const { code, discount_type, discount_value, max_discount, min_order, description } = req.body;
+  const cleanCode = String(code || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (!cleanCode || cleanCode.length < 3) {
+    return res.status(400).json({ error: 'Coupon code must be at least 3 alphanumeric characters.' });
+  }
+  const val = Number(discount_value);
+  if (isNaN(val) || val <= 0) {
+    return res.status(400).json({ error: 'Discount value must be greater than 0.' });
+  }
+  const dtype = ['PERCENT', 'FLAT', 'DELIVERY'].includes(discount_type) ? discount_type : 'PERCENT';
+  try {
+    const insert = db.prepare(`
+      INSERT INTO coupons (code, discount_type, discount_value, max_discount, min_order, description, is_active)
+      VALUES (?, ?, ?, ?, ?, ?, 1)
+    `);
+    const info = insert.run(cleanCode, dtype, val, Number(max_discount) || 100, Number(min_order) || 0, sanitizeText(description || `${cleanCode} special offer`));
+    const created = db.prepare('SELECT * FROM coupons WHERE id = ?').get(info.lastInsertRowid);
+    io.emit('coupons:update');
+    res.status(201).json({ success: true, coupon: created });
+  } catch (err) {
+    if (err.message && err.message.includes('UNIQUE')) {
+      return res.status(409).json({ error: `Coupon code "${cleanCode}" already exists.` });
+    }
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch('/api/admin/coupons/:id/toggle', authenticateUser, requireRole(['ADMIN']), (req, res) => {
+  const coupon = db.prepare('SELECT * FROM coupons WHERE id = ?').get(req.params.id);
+  if (!coupon) return res.status(404).json({ error: 'Coupon not found' });
+  const nextStatus = coupon.is_active ? 0 : 1;
+  db.prepare('UPDATE coupons SET is_active = ? WHERE id = ?').run(nextStatus, coupon.id);
+  io.emit('coupons:update');
+  res.json({ success: true, id: coupon.id, is_active: nextStatus });
+});
+
+app.delete('/api/admin/coupons/:id', authenticateUser, requireRole(['ADMIN']), (req, res) => {
+  db.prepare('DELETE FROM coupons WHERE id = ?').run(req.params.id);
+  io.emit('coupons:update');
+  res.json({ success: true, id: req.params.id });
+});
+
 // Socket connection
 io.on('connection', (socket) => {
   socket.on('join', (room) => {
     if (room) socket.join(room);
+  });
+
+  socket.on('rider:location', (data) => {
+    if (!data || !data.order_id) return;
+    const orderId = Number(data.order_id);
+    const lat = Number(data.lat);
+    const lng = Number(data.lng);
+    if (isNaN(lat) || isNaN(lng)) return;
+
+    const loc = {
+      order_id: orderId,
+      rider_id: Number(data.rider_id) || null,
+      lat,
+      lng,
+      heading: Number(data.heading) || 0,
+      progress: Math.min(1, Math.max(0, Number(data.progress) || 0)),
+      speed: Number(data.speed) || 24,
+      updated_at: Date.now()
+    };
+
+    liveRiderLocations.set(orderId, loc);
+    if (loc.rider_id) {
+      liveRiderLocations.set(`rider_${loc.rider_id}`, loc);
+      try {
+        db.prepare('UPDATE riders SET lat = ?, lng = ? WHERE id = ?').run(lat, lng, loc.rider_id);
+      } catch (e) {}
+    }
+
+    io.to(`order:${orderId}`).emit('rider:location', loc);
+    io.emit('rider:location', loc);
   });
 });
 

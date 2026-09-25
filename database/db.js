@@ -106,7 +106,32 @@ CREATE TABLE IF NOT EXISTS order_status_log (
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (order_id) REFERENCES orders(id)
 );
+
+CREATE TABLE IF NOT EXISTS coupons (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  code TEXT UNIQUE NOT NULL,
+  discount_type TEXT DEFAULT 'PERCENT', -- 'PERCENT', 'FLAT', 'DELIVERY'
+  discount_value REAL NOT NULL,
+  max_discount REAL DEFAULT 100,
+  min_order REAL DEFAULT 0,
+  description TEXT,
+  is_active INTEGER DEFAULT 1,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
 `);
+
+// Seed default coupons if not present
+try {
+  const couponCount = db.prepare('SELECT COUNT(*) as c FROM coupons').get().c;
+  if (couponCount === 0) {
+    const insertCoupon = db.prepare('INSERT INTO coupons (code, discount_type, discount_value, max_discount, min_order, description, is_active) VALUES (?, ?, ?, ?, ?, ?, 1)');
+    insertCoupon.run('WELCOME50', 'PERCENT', 50, 100, 100, '50% off up to ₹100');
+    insertCoupon.run('FREEDEL', 'DELIVERY', 25, 25, 0, 'Free Delivery (₹25 off)');
+    insertCoupon.run('FLAT20', 'FLAT', 20, 20, 150, 'Flat ₹20 discount on orders above ₹150');
+  }
+} catch (e) {
+  console.warn('Coupon seed notice:', e.message);
+}
 
 // Safe migrations for existing SQLite databases
 function addColumnIfNotExists(table, columnDef) {
@@ -124,9 +149,12 @@ function addColumnIfNotExists(table, columnDef) {
 addColumnIfNotExists('restaurants', 'lat REAL DEFAULT 22.5539');
 addColumnIfNotExists('restaurants', 'lng REAL DEFAULT 72.9515');
 addColumnIfNotExists('menu_items', 'is_available INTEGER DEFAULT 1');
+addColumnIfNotExists('menu_items', 'description TEXT');
 addColumnIfNotExists('riders', 'phone TEXT DEFAULT "9876543210"');
 addColumnIfNotExists('riders', 'rating REAL DEFAULT 4.8');
 addColumnIfNotExists('riders', 'earnings REAL DEFAULT 0');
+addColumnIfNotExists('riders', 'lat REAL DEFAULT 22.5532');
+addColumnIfNotExists('riders', 'lng REAL DEFAULT 72.9485');
 addColumnIfNotExists('orders', 'user_id INTEGER');
 addColumnIfNotExists('orders', 'customer_email TEXT');
 addColumnIfNotExists('orders', 'dest_lat REAL');
